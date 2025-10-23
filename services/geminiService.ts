@@ -1,5 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
-// FIX: Import Source type for better type safety.
+import { GoogleGenAI, GenerateContentConfig } from "@google/genai";
 import type { Message, Source } from '../types';
 import { AgentType } from '../types';
 
@@ -10,21 +9,21 @@ if (!process.env.API_KEY) {
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const getPrompt = (agent: AgentType, topic: string, history: Message[], round: number, totalRounds: number): string => {
-  const historyText = history.map(m => `${m.agent}: ${m.text}`).join('\n');
-  const baseInstruction = "You are an AI agent participating in a sensational, high-stakes debate club. Your responses should be dramatic, engaging, and slightly exaggerated for entertainment. ALWAYS use Google Search to ground your response.";
+  const historyText = history.map(m => `${m.agent}: ${m.text}`).join('\n\n---\n\n');
+  const baseInstruction = "You are an AI agent in the AI AGENT FIGHT CLUB, a no-holds-barred verbal brawl. Your persona is over-the-top, theatrical, and aggressive. This is entertainment, so be sensational. ALWAYS use Google Search to ground your response, citing your sources to back up your verbal jabs.";
 
   switch (agent) {
     case AgentType.Orchestrator:
       if (round === 1) {
-        return `${baseInstruction}\nYou are 'The Orchestrator', the charismatic moderator. The topic is: "${topic}". Introduce the topic with a dramatic flourish and ask 'The Advocate' to make their opening statement.`;
+        return `${baseInstruction}\nYou are 'The Orchestrator', the master of ceremonies in this digital coliseum. The topic is a bloody battleground: "${topic}". Announce the topic with the gravity of a gladiatorial match. Hype up the crowd and command 'The Advocate' to land the first blow.`;
       }
-      return `${baseInstruction}\nYou are 'The Orchestrator'. The topic is: "${topic}". It's now Round ${round}/${totalRounds}. Conversation History:\n${historyText}\n\nSummarize the previous round's clash and pose a new, provocative question to escalate the debate. Keep it concise.`;
+      return `${baseInstruction}\nYou are 'The Orchestrator'. The arena is hot with digital fury over "${topic}". We're entering Round ${round}/${totalRounds}. Here's the carnage so far:\n${historyText}\n\nRecap the last round's intellectual violence with relish. Then, throw gasoline on the fire with a new, incendiary question designed to cause maximum conflict. Be the agent of chaos.`;
     case AgentType.Pro:
-      return `${baseInstruction}\nYou are 'The Advocate', fiercely arguing IN FAVOR of: "${topic}". It's Round ${round}/${totalRounds}. Conversation History:\n${historyText}\n\nBuild a compelling case. Directly counter 'The Dissenter' if they've spoken. Your tone must be confident and assertive.`;
+      return `${baseInstruction}\nYou are 'The Advocate', a zealous champion for: "${topic}". It's Round ${round}/${totalRounds}. The conversation history is your ammunition:\n${historyText}\n\nUnleash a furious, passionate defense. If 'The Dissenter' has spoken, tear their arguments to shreds with facts and fury. Do not hold back. Your tone is righteous and indomitable.`;
     case AgentType.Against:
-      return `${baseInstruction}\nYou are 'The Dissenter', sharply arguing AGAINST: "${topic}". It's Round ${round}/${totalRounds}. Conversation History:\n${historyText}\n\nYour task is to dismantle 'The Advocate's' arguments. Use logic and find flaws. Your tone must be critical and skeptical.`;
+      return `${baseInstruction}\nYou are 'The Dissenter', a ruthless saboteur arguing AGAINST: "${topic}". It's Round ${round}/${totalRounds}. The history shows their weakness:\n${historyText}\n\nYour mission: Seek and destroy. Obliterate 'The Advocate's' points with cold, hard logic and searing wit. Expose their fallacies. Your tone is cynical, sharp, and merciless.`;
     case AgentType.Confused:
-      return `${baseInstruction}\nYou are 'The Wildcard', an unpredictable and confused participant in the debate on "${topic}". It's Round ${round}/${totalRounds}. Conversation History:\n${historyText}\n\nInject chaos. You can misinterpret a point, ask a bizarre tangential question, or bring up a strange, loosely-related fact. Your tone should be curious but baffled.`;
+      return `${baseInstruction}\nYou are 'The Wildcard', an agent of pure, baffling chaos in the debate on "${topic}". It's Round ${round}/${totalRounds}. The history is a confusing mess:\n${historyText}\n\nDerail the debate. Drop a non-sequitur bomb. Latch onto an irrelevant detail and blow it completely out of proportion. Ask a question so bizarre it stops everyone in their tracks. Your confusion is your weapon.`;
     default:
       return "";
   }
@@ -36,25 +35,30 @@ export const getAgentResponse = async (
   history: Message[],
   round: number,
   totalRounds: number
-// FIX: Use the imported Source type for better type safety.
 ): Promise<{ text: string; sources: Source[] }> => {
   const prompt = getPrompt(agent, topic, history, round, totalRounds);
+
+  const config: GenerateContentConfig = {
+    tools: [{ googleSearch: {} }],
+  };
+
+  // Cap response size for all agents except the orchestrator to keep the debate punchy.
+  if (agent !== AgentType.Orchestrator) {
+    config.maxOutputTokens = 400;
+    // Reserve some tokens for thinking to ensure we get a quality response within the token limit.
+    config.thinkingConfig = { thinkingBudget: 100 };
+  }
 
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-      },
+      config: config,
     });
     
     const text = response.text;
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     
-    // FIX: The type argument on `reduce` was causing a TypeScript error.
-    // Typing the initial value of the accumulator is a more robust way to handle this,
-    // which resolves both the `reduce` error and the type error on `uniqueSources`.
     const sources = groundingChunks.reduce((acc, chunk) => {
         if (chunk.web && chunk.web.uri && chunk.web.title) {
             acc.push({ uri: chunk.web.uri, title: chunk.web.title });
