@@ -1,4 +1,3 @@
-
 export enum AgentType {
   Orchestrator = 'The Orchestrator',
   Pro = 'The Advocate',
@@ -14,6 +13,15 @@ export interface Source {
 export interface Message {
   id: string;
   agent: AgentType;
+  agentName: string; // The customizable name of the agent
   text: string;
   sources: Source[];
 }
+
+export interface AgentConfig {
+  name: string;
+  persona: string;
+  model: string;
+}
+
+export type AgentCollection = Record<AgentType, AgentConfig>;

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { Message } from '../types';
 import { AgentType } from '../types';
@@ -65,7 +64,7 @@ const AgentMessage: React.FC<AgentMessageProps> = ({ message }) => {
     <div className={`animate-fade-in border-l-4 p-4 md:p-6 rounded-r-lg ${config.borderColor} ${config.bgColor}`}>
       <div className="flex items-center gap-3 mb-3">
         <div className={config.textColor}>{config.icon}</div>
-        <h3 className={`font-bold text-lg ${config.textColor}`}>{message.agent}</h3>
+        <h3 className={`font-bold text-lg ${config.textColor}`}>{message.agentName}</h3>
       </div>
       <p className="whitespace-pre-wrap text-slate-300">{message.text}</p>
       {message.sources.length > 0 && (

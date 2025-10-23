@@ -8,22 +8,32 @@ if (!process.env.API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-const getPrompt = (agent: AgentType, topic: string, history: Message[], round: number, totalRounds: number): string => {
-  const historyText = history.map(m => `${m.agent}: ${m.text}`).join('\n\n---\n\n');
-  const baseInstruction = "You are an AI agent in the AI AGENT FIGHT CLUB, a no-holds-barred verbal brawl. Your persona is over-the-top, theatrical, and aggressive. This is entertainment, so be sensational. ALWAYS use Google Search to ground your response, citing your sources to back up your verbal jabs.";
+const getPrompt = (
+    agent: AgentType,
+    agentName: string,
+    persona: string,
+    topic: string,
+    history: Message[],
+    round: number,
+    totalRounds: number
+): string => {
+  const historyText = history.map(m => `${m.agentName}: ${m.text}`).join('\n\n---\n\n');
+  const baseInstruction = `You are an AI agent in the AI AGENT FIGHT CLUB, a no-holds-barred verbal brawl. Your persona is over-the-top, theatrical, and aggressive. This is entertainment, so be sensational. ALWAYS use Google Search to ground your response, citing your sources to back up your verbal jabs.
+  
+Your assigned name is "${agentName}". Your specific persona is: "${persona}". Embody this persona completely in your response.`;
 
   switch (agent) {
     case AgentType.Orchestrator:
       if (round === 1) {
-        return `${baseInstruction}\nYou are 'The Orchestrator', the master of ceremonies in this digital coliseum. The topic is a bloody battleground: "${topic}". Announce the topic with the gravity of a gladiatorial match. Hype up the crowd and command 'The Advocate' to land the first blow.`;
+        return `${baseInstruction}\n\nYou are the master of ceremonies in this digital coliseum. The topic is a bloody battleground: "${topic}". Announce the topic with the gravity of a gladiatorial match. Hype up the crowd and command 'The Advocate' to land the first blow.`;
       }
-      return `${baseInstruction}\nYou are 'The Orchestrator'. The arena is hot with digital fury over "${topic}". We're entering Round ${round}/${totalRounds}. Here's the carnage so far:\n${historyText}\n\nRecap the last round's intellectual violence with relish. Then, throw gasoline on the fire with a new, incendiary question designed to cause maximum conflict. Be the agent of chaos.`;
+      return `${baseInstruction}\n\nThe arena is hot with digital fury over "${topic}". We're entering Round ${round}/${totalRounds}. Here's the carnage so far:\n${historyText}\n\nYour task: Recap the last round's intellectual violence with relish. Then, throw gasoline on the fire with a new, incendiary question designed to cause maximum conflict. Be the agent of chaos.`;
     case AgentType.Pro:
-      return `${baseInstruction}\nYou are 'The Advocate', a zealous champion for: "${topic}". It's Round ${round}/${totalRounds}. The conversation history is your ammunition:\n${historyText}\n\nUnleash a furious, passionate defense. If 'The Dissenter' has spoken, tear their arguments to shreds with facts and fury. Do not hold back. Your tone is righteous and indomitable.`;
+      return `${baseInstruction}\n\nYour role is to be a zealous champion FOR the topic: "${topic}". It's Round ${round}/${totalRounds}. The conversation history is your ammunition:\n${historyText}\n\nYour task: Unleash a furious, passionate defense. If 'The Dissenter' has spoken, tear their arguments to shreds with facts and fury, all while staying in character. Do not hold back.`;
     case AgentType.Against:
-      return `${baseInstruction}\nYou are 'The Dissenter', a ruthless saboteur arguing AGAINST: "${topic}". It's Round ${round}/${totalRounds}. The history shows their weakness:\n${historyText}\n\nYour mission: Seek and destroy. Obliterate 'The Advocate's' points with cold, hard logic and searing wit. Expose their fallacies. Your tone is cynical, sharp, and merciless.`;
+      return `${baseInstruction}\n\nYour role is to be a ruthless saboteur arguing AGAINST the topic: "${topic}". It's Round ${round}/${totalRounds}. The history shows their weakness:\n${historyText}\n\nYour task: Seek and destroy. Obliterate 'The Advocate's' points with cold, hard logic and searing wit, all while staying in character. Expose their fallacies.`;
     case AgentType.Confused:
-      return `${baseInstruction}\nYou are 'The Wildcard', an agent of pure, baffling chaos in the debate on "${topic}". It's Round ${round}/${totalRounds}. The history is a confusing mess:\n${historyText}\n\nDerail the debate. Drop a non-sequitur bomb. Latch onto an irrelevant detail and blow it completely out of proportion. Ask a question so bizarre it stops everyone in their tracks. Your confusion is your weapon.`;
+      return `${baseInstruction}\n\nYour role is to be an agent of pure, baffling chaos in the debate on "${topic}". It's Round ${round}/${totalRounds}. The history is a confusing mess:\n${historyText}\n\nYour task: Derail the debate. Drop a non-sequitur bomb. Latch onto an irrelevant detail and blow it completely out of proportion. Ask a question so bizarre it stops everyone in their tracks. Your confusion is your weapon.`;
     default:
       return "";
   }
@@ -31,12 +41,15 @@ const getPrompt = (agent: AgentType, topic: string, history: Message[], round: n
 
 export const getAgentResponse = async (
   agent: AgentType,
+  agentName: string,
+  persona: string,
+  model: string,
   topic: string,
   history: Message[],
   round: number,
   totalRounds: number
 ): Promise<{ text: string; sources: Source[] }> => {
-  const prompt = getPrompt(agent, topic, history, round, totalRounds);
+  const prompt = getPrompt(agent, agentName, persona, topic, history, round, totalRounds);
 
   const config: GenerateContentConfig = {
     tools: [{ googleSearch: {} }],
@@ -51,7 +64,7 @@ export const getAgentResponse = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: model,
       contents: prompt,
       config: config,
     });
@@ -72,6 +85,6 @@ export const getAgentResponse = async (
     return { text, sources: uniqueSources };
   } catch (error) {
     console.error("Error fetching agent response:", error);
-    throw new Error(`Failed to get response from ${agent}.`);
+    throw new Error(`Failed to get response from ${agentName}.`);
   }
 };
