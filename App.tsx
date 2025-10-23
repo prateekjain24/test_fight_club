@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import AgentMessage from './components/AgentMessage';
 import { getAgentResponse } from './services/geminiService';
@@ -37,6 +36,14 @@ const DEFAULT_AGENTS: AgentCollection = {
   }
 };
 
+const TurnAnnouncer: React.FC<{ agentName: string }> = ({ agentName }) => (
+    <div className="absolute top-0 left-0 right-0 z-10 animate-announce">
+        <div className="bg-black/80 text-center p-2 shadow-lg">
+            <h3 className="text-xl font-display tracking-wider text-red-500">{agentName}'s Turn</h3>
+        </div>
+    </div>
+);
+
 const App: React.FC = () => {
   const [topic, setTopic] = useState<string>('');
   const [userInput, setUserInput] = useState<string>('');
@@ -44,6 +51,7 @@ const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isDebateActive, setIsDebateActive] = useState<boolean>(false);
   const [loadingAgent, setLoadingAgent] = useState<AgentType | null>(null);
+  const [announcingAgent, setAnnouncingAgent] = useState<AgentType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showCustomizer, setShowCustomizer] = useState<boolean>(false);
   const [agents, setAgents] = useState<AgentCollection>(DEFAULT_AGENTS);
@@ -55,14 +63,15 @@ const App: React.FC = () => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, loadingAgent]);
+  }, [messages, loadingAgent, announcingAgent]);
 
   useEffect(() => {
     const runDebateTurn = async () => {
-      if (!isDebateActive || messages.length >= totalTurns) {
-        if (isDebateActive) {
-          setIsDebateActive(false);
-          setLoadingAgent(null);
+      if (!isDebateActive || messages.length >= totalTurns || announcingAgent || loadingAgent) {
+        if (isDebateActive && messages.length >= totalTurns) {
+            setIsDebateActive(false);
+            setLoadingAgent(null);
+            setAnnouncingAgent(null);
         }
         return;
       }
@@ -72,35 +81,41 @@ const App: React.FC = () => {
       const nextAgentConfig = agents[nextAgentType];
       const currentRound = Math.floor(currentTurnIndex / AGENT_TURN_ORDER.length) + 1;
 
-      setLoadingAgent(nextAgentType);
-      setError(null);
+      setAnnouncingAgent(nextAgentType);
 
-      try {
-        const response = await getAgentResponse(
-          nextAgentType,
-          nextAgentConfig.name,
-          nextAgentConfig.persona,
-          nextAgentConfig.model,
-          topic,
-          messages,
-          currentRound,
-          numRounds
-        );
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `msg-${Date.now()}`,
-            agent: nextAgentType,
-            agentName: nextAgentConfig.name,
-            text: response.text,
-            sources: response.sources,
-          },
-        ]);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'An unknown error occurred.');
-        setIsDebateActive(false);
-        setLoadingAgent(null);
-      }
+      setTimeout(async () => {
+        setAnnouncingAgent(null);
+        setLoadingAgent(nextAgentType);
+        setError(null);
+
+        try {
+          const response = await getAgentResponse(
+            nextAgentType,
+            nextAgentConfig.name,
+            nextAgentConfig.persona,
+            nextAgentConfig.model,
+            topic,
+            messages,
+            currentRound,
+            numRounds
+          );
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `msg-${Date.now()}`,
+              agent: nextAgentType,
+              agentName: nextAgentConfig.name,
+              text: response.text,
+              sources: response.sources,
+            },
+          ]);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : 'An unknown error occurred.');
+          setIsDebateActive(false);
+        } finally {
+            setLoadingAgent(null);
+        }
+      }, 2000); // Duration of the announcer animation
     };
 
     if (isDebateActive) {
@@ -124,6 +139,7 @@ const App: React.FC = () => {
   const handleReset = () => {
     setIsDebateActive(false);
     setLoadingAgent(null);
+    setAnnouncingAgent(null);
     setMessages([]);
     setTopic('');
     setUserInput('');
@@ -171,27 +187,27 @@ const App: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const isDebateFinished = messages.length >= totalTurns && !loadingAgent;
+  const isDebateFinished = messages.length >= totalTurns && !loadingAgent && !announcingAgent;
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col items-center p-4 md:p-8">
+    <div className="min-h-screen bg-gray-900 flex flex-col items-center p-4 md:p-8">
       <main className="w-full max-w-4xl h-full flex flex-col">
         <header className="text-center mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-rose-500 via-violet-500 to-sky-500 pb-2">
+          <h1 className="text-5xl md:text-6xl font-display tracking-wider font-bold bg-clip-text text-transparent bg-gradient-to-r from-red-600 via-orange-500 to-amber-400 pb-2">
             AI Agent Fight Club
           </h1>
-          <p className="text-slate-400 mt-2">Where algorithms argue and chaos is king.</p>
+          <p className="text-gray-400 mt-2">Where algorithms argue and chaos is king.</p>
         </header>
 
         {!topic ? (
-          <div className="bg-slate-800/50 rounded-lg p-6 w-full max-w-lg mx-auto flex flex-col gap-4 animate-fade-in">
+          <div className="bg-gray-800/50 p-6 w-full max-w-lg mx-auto flex flex-col gap-4 animate-fade-in">
             <div className="space-y-4">
               <div>
                 <label htmlFor="topic-input" className="font-semibold text-slate-300 block mb-2">Enter a Debate Topic:</label>
                 <input
                   id="topic-input" type="text" value={userInput} onChange={(e) => setUserInput(e.target.value)}
                   placeholder="e.g., Are cats secretly plotting world domination?"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-md p-3 focus:ring-2 focus:ring-violet-500 focus:outline-none transition-shadow"
+                  className="w-full bg-gray-950 border border-gray-700 p-3 focus:ring-2 focus:ring-red-500 focus:outline-none transition-shadow"
                   onKeyDown={(e) => e.key === 'Enter' && !isDebateActive && handleStartDebate()}
                 />
               </div>
@@ -200,36 +216,36 @@ const App: React.FC = () => {
                 <input
                   id="rounds-input" type="number" value={numRounds} onChange={(e) => setNumRounds(Math.max(1, parseInt(e.target.value, 10) || 1))}
                   min="1"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-md p-3 focus:ring-2 focus:ring-violet-500 focus:outline-none transition-shadow"
+                  className="w-full bg-gray-950 border border-gray-700 p-3 focus:ring-2 focus:ring-red-500 focus:outline-none transition-shadow"
                 />
               </div>
             </div>
 
-            <div className="border-t border-slate-700/50 my-2"></div>
+            <div className="border-t border-gray-700/50 my-2"></div>
 
             <div>
-              <button onClick={() => setShowCustomizer(!showCustomizer)} className="text-violet-400 font-semibold hover:text-violet-300 transition-colors w-full text-left flex justify-between items-center">
+              <button onClick={() => setShowCustomizer(!showCustomizer)} className="text-red-400 font-semibold hover:text-red-300 transition-colors w-full text-left flex justify-between items-center">
                 <span>The Promoter's Corner (Customize Agents)</span>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 transition-transform ${showCustomizer ? 'rotate-180' : ''}`}><path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" /></svg>
               </button>
               {showCustomizer && (
                 <div className="mt-4 space-y-4 animate-fade-in">
                   {(Object.keys(agents) as AgentType[]).map((agentType) => (
-                    <div key={agentType} className="bg-slate-900/50 p-3 rounded-md border border-slate-700 space-y-2">
+                    <div key={agentType} className="bg-gray-950/50 p-3 border border-gray-700 space-y-2">
                       <label className="font-bold text-slate-300 block">{agentType}</label>
                       <input type="text" value={agents[agentType].name} onChange={e => handleAgentChange(agentType, 'name', e.target.value)}
                         placeholder="Agent Name"
-                        className="w-full bg-slate-800 border border-slate-600 rounded-md p-2 text-sm focus:ring-1 focus:ring-violet-500 focus:outline-none"
+                        className="w-full bg-gray-800 border border-gray-600 p-2 text-sm focus:ring-1 focus:ring-red-500 focus:outline-none"
                       />
                       <textarea value={agents[agentType].persona} onChange={e => handleAgentChange(agentType, 'persona', e.target.value)}
                         placeholder="Agent Persona"
                         rows={3}
-                        className="w-full bg-slate-800 border border-slate-600 rounded-md p-2 text-sm focus:ring-1 focus:ring-violet-500 focus:outline-none"
+                        className="w-full bg-gray-800 border border-gray-600 p-2 text-sm focus:ring-1 focus:ring-red-500 focus:outline-none"
                       />
                       <select 
                         value={agents[agentType].model} 
                         onChange={e => handleAgentChange(agentType, 'model', e.target.value)}
-                        className="w-full bg-slate-800 border border-slate-600 rounded-md p-2 text-sm focus:ring-1 focus:ring-violet-500 focus:outline-none"
+                        className="w-full bg-gray-800 border border-gray-600 p-2 text-sm focus:ring-1 focus:ring-red-500 focus:outline-none"
                       >
                         {AVAILABLE_MODELS.map(model => (
                           <option key={model} value={model}>{model}</option>
@@ -245,15 +261,16 @@ const App: React.FC = () => {
             <button
               onClick={handleStartDebate}
               disabled={isDebateActive}
-              className="w-full bg-violet-600 hover:bg-violet-700 text-white font-bold py-3 px-4 rounded-md transition-all duration-300 transform hover:scale-105 disabled:bg-slate-600 disabled:cursor-not-allowed mt-4"
+              className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 transition-all duration-300 transform hover:scale-105 disabled:bg-gray-600 disabled:cursor-not-allowed mt-4 uppercase tracking-wider"
             >
-              Start the Debate
+              Start the Fight!
             </button>
             {error && <p className="text-rose-400 text-sm mt-2">{error}</p>}
           </div>
         ) : (
-          <div className="flex flex-col flex-grow w-full bg-slate-800/50 rounded-lg shadow-2xl overflow-hidden h-[75vh]">
-            <div className="p-4 border-b border-slate-700 bg-slate-800/70">
+          <div className="flex flex-col flex-grow w-full bg-gray-800/50 shadow-2xl overflow-hidden h-[75vh] relative">
+             {announcingAgent && <TurnAnnouncer agentName={agents[announcingAgent].name} />}
+            <div className="p-4 border-b border-gray-700 bg-gray-900/70">
               <h2 className="text-xl font-bold text-center">Topic: <span className="font-normal text-slate-300">{topic}</span></h2>
             </div>
 
@@ -262,34 +279,34 @@ const App: React.FC = () => {
                 <AgentMessage key={msg.id} message={msg} />
               ))}
               {loadingAgent && (
-                <div className="animate-pulse-fast flex items-center gap-3 text-slate-400 p-4">
-                  <div className="w-6 h-6 border-2 border-slate-500 border-t-slate-300 rounded-full animate-spin"></div>
-                  <span>{agents[loadingAgent]?.name || 'Agent'} is thinking...</span>
+                <div className="flex items-center gap-3 text-gray-400 p-4">
+                  <div className="w-6 h-6 border-2 border-gray-500 border-t-gray-300 rounded-full animate-spin"></div>
+                  <span>{agents[loadingAgent]?.name || 'Agent'} is generating a response...</span>
                 </div>
               )}
               {isDebateFinished && (
-                <div className="animate-fade-in text-center p-6 rounded-lg bg-slate-900/50 my-4 border border-amber-500/50">
-                  <h3 className="text-2xl font-bold text-amber-400">The Debate Has Concluded!</h3>
+                <div className="animate-fade-in text-center p-6 bg-gray-950/50 my-4 border border-orange-500/50">
+                  <h3 className="text-2xl font-bold text-orange-400">The Debate Has Concluded!</h3>
                   <p className="text-slate-300 mt-2">Who won? You decide. You can export the transcript or start a new topic below.</p>
                 </div>
               )}
               {error && (
-                <div className="animate-fade-in text-center p-4 rounded-lg bg-rose-500/10 my-4 border border-rose-500/50 text-rose-400">
+                <div className="animate-fade-in text-center p-4 bg-rose-500/10 my-4 border border-rose-500/50 text-rose-400">
                   <p><strong>An error occurred:</strong> {error}</p>
                 </div>
               )}
             </div>
 
-            <div className="p-4 border-t border-slate-700 bg-slate-800">
+            <div className="p-4 border-t border-gray-700 bg-gray-900">
               <div className="flex justify-between items-center">
-                <div className="text-sm text-slate-400">
+                <div className="text-sm text-gray-400">
                   Round {Math.min(numRounds, Math.floor(messages.length / AGENT_TURN_ORDER.length) + 1)} / {numRounds}
                 </div>
                 <div className="flex items-center gap-4">
                   {isDebateFinished && (
-                    <button onClick={handleExport} className="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-md transition-colors">Export</button>
+                    <button onClick={handleExport} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 transition-colors">Export</button>
                   )}
-                  <button onClick={handleReset} className="bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 px-4 rounded-md transition-colors">New Topic</button>
+                  <button onClick={handleReset} className="bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-4 transition-colors">New Topic</button>
                 </div>
               </div>
             </div>

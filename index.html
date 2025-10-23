@@ -1,23 +1,35 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Agent Fight Club</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              display: ['"Bebas Neue"', 'sans-serif'],
+            },
             animation: {
               'fade-in': 'fadeIn 0.5s ease-out',
               'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'announce': 'announce-in-out 2s ease-in-out forwards',
             },
             keyframes: {
               fadeIn: {
                 '0%': { opacity: 0, transform: 'translateY(10px)' },
                 '100%': { opacity: 1, transform: 'translateY(0)' },
+              },
+              'announce-in-out': {
+                '0%': { opacity: '0', transform: 'translateY(-100%)' },
+                '15%, 85%': { opacity: '1', transform: 'translateY(0)' },
+                '100%': { opacity: '0', transform: 'translateY(-100%)' },
               },
             }
           }
@@ -35,7 +47,7 @@
 }
 </script>
 </head>
-  <body class="bg-slate-900 text-slate-200 font-sans">
+  <body class="bg-gray-900 text-slate-200 font-sans">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
