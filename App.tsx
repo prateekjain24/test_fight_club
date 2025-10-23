@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import AgentMessage from './components/AgentMessage';
 import { getAgentResponse } from './services/geminiService';
@@ -11,18 +10,18 @@ const AGENT_TURN_ORDER: AgentType[] = [
   AgentType.Against,
   AgentType.Confused,
 ];
-const TOTAL_ROUNDS = 6;
-const TOTAL_TURNS = TOTAL_ROUNDS * AGENT_TURN_ORDER.length;
 
 const App: React.FC = () => {
   const [topic, setTopic] = useState<string>('');
   const [userInput, setUserInput] = useState<string>('');
+  const [numRounds, setNumRounds] = useState<number>(5);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isDebateActive, setIsDebateActive] = useState<boolean>(false);
   const [loadingAgent, setLoadingAgent] = useState<AgentType | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const totalTurns = numRounds * AGENT_TURN_ORDER.length;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -32,7 +31,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const runDebateTurn = async () => {
-      if (!isDebateActive || messages.length >= TOTAL_TURNS) {
+      if (!isDebateActive || messages.length >= totalTurns) {
         if(isDebateActive) {
           setIsDebateActive(false);
           setLoadingAgent(null);
@@ -48,7 +47,7 @@ const App: React.FC = () => {
       setError(null);
 
       try {
-        const response = await getAgentResponse(nextAgent, topic, messages, currentRound);
+        const response = await getAgentResponse(nextAgent, topic, messages, currentRound, numRounds);
         setMessages((prev) => [
           ...prev,
           {
@@ -71,7 +70,7 @@ const App: React.FC = () => {
         return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDebateActive, messages, topic]);
+  }, [isDebateActive, messages, topic, numRounds, totalTurns]);
 
   const handleStartDebate = () => {
     if (userInput.trim().length < 10) {
@@ -90,10 +89,44 @@ const App: React.FC = () => {
     setMessages([]);
     setTopic('');
     setUserInput('');
+    setNumRounds(5);
     setError(null);
   };
 
-  const isDebateFinished = messages.length >= TOTAL_TURNS && !loadingAgent;
+  const handleExport = () => {
+    if (messages.length === 0) return;
+
+    let markdownContent = `# AI Agent Fight Club: ${topic}\n\n`;
+
+    messages.forEach(msg => {
+      markdownContent += `---\n\n`;
+      markdownContent += `## ${msg.agent}\n\n`;
+      markdownContent += `${msg.text}\n\n`;
+      if (msg.sources && msg.sources.length > 0) {
+        markdownContent += `**Sources:**\n`;
+        msg.sources.forEach(source => {
+          // Sanitize title to avoid markdown issues with brackets
+          const sanitizedTitle = source.title.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+          markdownContent += `- [${sanitizedTitle}](${source.uri})\n`;
+        });
+        markdownContent += `\n`;
+      }
+    });
+
+    const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    // Create a URL-friendly filename
+    const sanitizedTopic = topic.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
+    a.download = `ai-debate-${sanitizedTopic || 'export'}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const isDebateFinished = messages.length >= totalTurns && !loadingAgent;
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center p-4 md:p-8">
@@ -107,20 +140,33 @@ const App: React.FC = () => {
 
         {!topic ? (
           <div className="bg-slate-800/50 rounded-lg p-6 w-full max-w-lg mx-auto flex flex-col gap-4 animate-fade-in">
-            <label htmlFor="topic-input" className="font-semibold text-slate-300">Enter a Debate Topic:</label>
-            <input
-              id="topic-input"
-              type="text"
-              value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
-              placeholder="e.g., Are cats secretly plotting world domination?"
-              className="w-full bg-slate-900 border border-slate-700 rounded-md p-3 focus:ring-2 focus:ring-violet-500 focus:outline-none transition-shadow"
-              onKeyDown={(e) => e.key === 'Enter' && !isDebateActive && handleStartDebate()}
-            />
+            <div>
+              <label htmlFor="topic-input" className="font-semibold text-slate-300 block mb-2">Enter a Debate Topic:</label>
+              <input
+                id="topic-input"
+                type="text"
+                value={userInput}
+                onChange={(e) => setUserInput(e.target.value)}
+                placeholder="e.g., Are cats secretly plotting world domination?"
+                className="w-full bg-slate-900 border border-slate-700 rounded-md p-3 focus:ring-2 focus:ring-violet-500 focus:outline-none transition-shadow"
+                onKeyDown={(e) => e.key === 'Enter' && !isDebateActive && handleStartDebate()}
+              />
+            </div>
+            <div>
+              <label htmlFor="rounds-input" className="font-semibold text-slate-300 block mb-2">Number of Rounds (min 1):</label>
+              <input
+                id="rounds-input"
+                type="number"
+                value={numRounds}
+                onChange={(e) => setNumRounds(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                min="1"
+                className="w-full bg-slate-900 border border-slate-700 rounded-md p-3 focus:ring-2 focus:ring-violet-500 focus:outline-none transition-shadow"
+              />
+            </div>
             <button
               onClick={handleStartDebate}
               disabled={isDebateActive}
-              className="w-full bg-violet-600 hover:bg-violet-700 text-white font-bold py-3 px-4 rounded-md transition-all duration-300 transform hover:scale-105 disabled:bg-slate-600 disabled:cursor-not-allowed"
+              className="w-full bg-violet-600 hover:bg-violet-700 text-white font-bold py-3 px-4 rounded-md transition-all duration-300 transform hover:scale-105 disabled:bg-slate-600 disabled:cursor-not-allowed mt-2"
             >
               Start the Debate
             </button>
@@ -145,7 +191,7 @@ const App: React.FC = () => {
                 {isDebateFinished && (
                      <div className="animate-fade-in text-center p-6 rounded-lg bg-slate-900/50 my-4 border border-amber-500/50">
                         <h3 className="text-2xl font-bold text-amber-400">The Debate Has Concluded!</h3>
-                        <p className="text-slate-300 mt-2">Who won? You decide.</p>
+                        <p className="text-slate-300 mt-2">Who won? You decide. You can export the transcript or start a new topic below.</p>
                       </div>
                 )}
                  {error && (
@@ -158,14 +204,24 @@ const App: React.FC = () => {
             <div className="p-4 border-t border-slate-700 bg-slate-800">
                 <div className="flex justify-between items-center">
                     <div className="text-sm text-slate-400">
-                        Round {Math.min(TOTAL_ROUNDS, Math.floor(messages.length / AGENT_TURN_ORDER.length) + 1)} / {TOTAL_ROUNDS}
+                        Round {Math.min(numRounds, Math.floor(messages.length / AGENT_TURN_ORDER.length) + 1)} / {numRounds}
                     </div>
-                    <button
-                        onClick={handleReset}
-                        className="bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 px-4 rounded-md transition-colors"
-                    >
-                        New Topic
-                    </button>
+                     <div className="flex items-center gap-4">
+                        {isDebateFinished && (
+                            <button
+                                onClick={handleExport}
+                                className="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-4 rounded-md transition-colors"
+                            >
+                                Export
+                            </button>
+                        )}
+                        <button
+                            onClick={handleReset}
+                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 px-4 rounded-md transition-colors"
+                        >
+                            New Topic
+                        </button>
+                    </div>
                 </div>
             </div>
           </div>
