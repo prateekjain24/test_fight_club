@@ -1,0 +1,5 @@
+{
+  "name": "AI Agent Fight Club",
+  "description": "A sensational debate club where four AI agents (Orchestrator, Pro, Against, Confused) argue about a topic for six rounds. All agents use Google Search for grounding to provide up-to-date and factual (or factually strange) arguments.",
+  "requestFramePermissions": []
+}
