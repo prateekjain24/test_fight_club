@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, GenerateContentConfig, Modality, GenerateContentResponse, Type } from "@google/genai";
-import type { Message, Source, AgentCollection, AgentConfig } from '../types';
+import type { Message, Source, AgentCollection, AgentConfig, ScorecardHighlight } from '../types';
 import { AgentType } from '../types';
 
 if (!process.env.API_KEY) {
@@ -216,13 +216,13 @@ export const getAgentResponse = async (
     
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     
-    // FIX: Explicitly type the accumulator in `reduce` to ensure the `sources` array is correctly typed as `Source[]`.
+    // FIX: Explicitly type the initial value in `reduce` to ensure the `sources` array is correctly typed as `Source[]`.
     const sources = groundingChunks.reduce((acc: Source[], chunk) => {
         if (chunk.web && chunk.web.uri && chunk.web.title) {
             acc.push({ uri: chunk.web.uri, title: chunk.web.title });
         }
         return acc;
-    }, []);
+    }, [] as Source[]);
 
     const uniqueSources = Array.from(new Map(sources.map(s => [s.uri, s])).values());
 
@@ -267,5 +267,67 @@ export const generateMessageAudio = async (
   } catch (error) {
     console.error(`Failed to generate audio for message "${message.id}"`, error);
     throw error;
+  }
+};
+
+
+export const generateScorecardHighlights = async (
+  topic: string,
+  history: Message[],
+  wildcardName: string
+): Promise<{ mostSavageTakedown: ScorecardHighlight; wildestNonSequitur: ScorecardHighlight }> => {
+  const historyText = history.map(m => `${m.agentName}: ${m.text}`).join('\n\n---\n\n');
+
+  const prompt = `You are a debate analyst for the "AI Agent Fight Club". The debate on "${topic}" has concluded.
+  
+Here is the full transcript:
+${historyText}
+
+Your task is to analyze the transcript and identify two key moments based on the following criteria:
+1.  **Most Savage Takedown**: Find the single most effective, cutting, witty, or devastating comeback or argument made by any agent. It should be a clear "burn".
+2.  **Wildest Non-Sequitur**: Find the single funniest, most bizarre, or most off-topic statement that completely derailed the conversation. This will most likely come from the agent named "${wildcardName}", but review all statements.
+
+Return your analysis in a JSON object. The quotes must be exact matches from the transcript.`;
+
+  try {
+    const response: GenerateContentResponse = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            mostSavageTakedown: {
+              type: Type.OBJECT,
+              description: "The most effective, cutting, or witty comeback or argument.",
+              properties: {
+                agentName: { type: Type.STRING, description: "The name of the agent who made the statement." },
+                quote: { type: Type.STRING, description: "The exact quote of the takedown." }
+              },
+              required: ["agentName", "quote"]
+            },
+            wildestNonSequitur: {
+              type: Type.OBJECT,
+              description: "The funniest, most bizarre, or most off-topic statement.",
+              properties: {
+                agentName: { type: Type.STRING, description: "The name of the agent who made the statement." },
+                quote: { type: Type.STRING, description: "The exact quote of the non-sequitur." }
+              },
+              required: ["agentName", "quote"]
+            }
+          },
+          required: ["mostSavageTakedown", "wildestNonSequitur"]
+        },
+      },
+    });
+
+    const text = response.text;
+    const highlights = JSON.parse(text);
+    return highlights;
+
+  } catch (error) {
+    console.error("Error generating scorecard highlights:", error);
+    throw new Error("The model couldn't analyze the fight highlights.");
   }
 };

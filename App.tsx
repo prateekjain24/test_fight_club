@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AgentMessage from './components/AgentMessage';
-import { getAgentResponse, generateMessageAudio, generateTrendingTopic, generateRandomPersonas } from './services/geminiService';
+import { getAgentResponse, generateMessageAudio, generateTrendingTopic, generateRandomPersonas, generateScorecardHighlights } from './services/geminiService';
 import { AgentType } from './types';
-import type { Message, AgentCollection } from './types';
+import type { Message, AgentCollection, Scorecard, ScorecardHighlight } from './types';
 
 const AGENT_TURN_ORDER: AgentType[] = [
   AgentType.Orchestrator,
@@ -122,6 +122,81 @@ const TurnAnnouncer: React.FC<{ agentName: string }> = ({ agentName }) => (
     </div>
 );
 
+// --- Post-Debate Components ---
+
+const ScorecardDisplay: React.FC<{ scorecard: Scorecard }> = ({ scorecard }) => (
+    <div className="animate-fade-in text-center p-6 bg-gray-950/50 my-4 border border-amber-500/50">
+        <h3 className="text-2xl font-bold font-display tracking-wider text-amber-400">Post-Fight Report</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-left">
+            {scorecard.mostSavageTakedown && (
+                <div className="bg-gray-800/50 p-3">
+                    <h4 className="font-bold text-rose-400">Most Savage Takedown</h4>
+                    <p className="text-sm text-slate-400 mt-1">"{scorecard.mostSavageTakedown.quote}"</p>
+                    <p className="text-xs font-semibold text-right mt-2">- {scorecard.mostSavageTakedown.agentName}</p>
+                </div>
+            )}
+            {scorecard.wildestNonSequitur && (
+                <div className="bg-gray-800/50 p-3">
+                    <h4 className="font-bold text-fuchsia-400">Wildest Non-Sequitur</h4>
+                    <p className="text-sm text-slate-400 mt-1">"{scorecard.wildestNonSequitur.quote}"</p>
+                    <p className="text-xs font-semibold text-right mt-2">- {scorecard.wildestNonSequitur.agentName}</p>
+                </div>
+            )}
+            {scorecard.mostCitedAgent && (
+                <div className="bg-gray-800/50 p-3">
+                    <h4 className="font-bold text-blue-400">Most Cited Agent</h4>
+                    <p className="text-sm text-slate-300 mt-1">{scorecard.mostCitedAgent.agentName}</p>
+                    <p className="text-xs text-slate-400">with {scorecard.mostCitedAgent.count} sources</p>
+                </div>
+            )}
+            {scorecard.audienceFavorite && (
+                <div className="bg-gray-800/50 p-3">
+                    <h4 className="font-bold text-orange-400">Audience Favorite</h4>
+                     <p className="text-sm text-slate-400 mt-1">"{scorecard.audienceFavorite.quote}"</p>
+                    <p className="text-xs font-semibold text-right mt-2">- {scorecard.audienceFavorite.agentName} ({scorecard.audienceFavorite.cheers} cheers)</p>
+                </div>
+            )}
+        </div>
+    </div>
+);
+
+const ShareableQuoteCard: React.FC<{ message: Message; onClose: () => void }> = ({ message, onClose }) => {
+    // A simplified version of AGENT_CONFIGS for display purposes
+    const AGENT_DISPLAY_CONFIG = {
+        [AgentType.Orchestrator]: { icon: <AgentMessage.OrchestratorIcon />, color: '#f97316' },
+        [AgentType.Pro]: { icon: <AgentMessage.ProIcon />, color: '#3b82f6' },
+        [AgentType.Against]: { icon: <AgentMessage.AgainstIcon />, color: '#f43f5e' },
+        [AgentType.Confused]: { icon: <AgentMessage.ConfusedIcon />, color: '#d946ef' },
+    };
+    const config = AGENT_DISPLAY_CONFIG[message.agent];
+
+    return (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 animate-fade-in p-4" onClick={onClose}>
+            <div className="bg-gray-800 p-8 max-w-2xl w-full relative border-l-8 shadow-2xl" style={{ borderColor: config.color }} onClick={e => e.stopPropagation()}>
+                <div className="flex items-center gap-4 mb-4 text-2xl" style={{ color: config.color }}>
+                    {config.icon}
+                    <h3 className="font-bold">{message.agentName}</h3>
+                </div>
+                <p className="text-slate-200 text-lg md:text-xl leading-relaxed">"{message.text}"</p>
+                <div className="text-right mt-6 font-display text-2xl tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-red-600 to-amber-400">
+                    AI AGENT FIGHT CLUB
+                </div>
+                 <button onClick={onClose} className="absolute top-2 right-2 text-gray-500 hover:text-white transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path fillRule="evenodd" d="M5.47 5.47a.75.75 0 011.06 0L12 10.94l5.47-5.47a.75.75 0 111.06 1.06L13.06 12l5.47 5.47a.75.75 0 11-1.06 1.06L12 13.06l-5.47 5.47a.75.75 0 01-1.06-1.06L10.94 12 5.47 6.53a.75.75 0 010-1.06z" clipRule="evenodd" /></svg>
+                </button>
+                <p className="text-center text-xs text-gray-400 mt-4">Screenshot this card to share!</p>
+            </div>
+        </div>
+    );
+};
+
+// Add icons to AgentMessage for use in the share card
+AgentMessage.OrchestratorIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8"><path d="M12 2.25c-5.18 0-9.44 4.06-9.72 9.19-.03.15-.03.3-.03.46 0 5.52 4.48 10 10 10s10-4.48 10-10c0-5.42-4.28-9.85-9.72-9.99a.754.754 0 00-.56 0A9.96 9.96 0 0012 2.25zm1.5 6a.75.75 0 00-1.5 0v6a.75.75 0 001.5 0V8.25zm-4.5 0a.75.75 0 00-1.5 0v6a.75.75 0 001.5 0V8.25zM12 15a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" /></svg>);
+AgentMessage.ProIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8"><path d="M11.25 2.25a.75.75 0 01.75.75v18a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM15.75 6a.75.75 0 01.75.75v14.25a.75.75 0 01-1.5 0V6.75a.75.75 0 01.75-.75zM6.75 9a.75.75 0 01.75.75v11.25a.75.75 0 01-1.5 0V9.75A.75.75 0 016.75 9z" /></svg>);
+AgentMessage.AgainstIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8"><path d="M15.04 4.96a.75.75 0 010 1.06L9.56 11.5l5.48 5.48a.75.75 0 11-1.06 1.06l-6-6a.75.75 0 010-1.06l6-6a.75.75 0 011.06 0z" /></svg>);
+AgentMessage.ConfusedIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8"><path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM12.75 6a.75.75 0 00-1.5 0v6c0 .414.336.75.75.75h3a.75.75 0 000-1.5h-2.25V6z" clipRule="evenodd" /></svg>);
+
+
 const App: React.FC = () => {
   const [topic, setTopic] = useState<string>('');
   const [userInput, setUserInput] = useState<string>('');
@@ -140,6 +215,8 @@ const App: React.FC = () => {
   const [isGeneratingVerdict, setIsGeneratingVerdict] = useState<boolean>(false);
   const [isGeneratingTopic, setIsGeneratingTopic] = useState<boolean>(false);
   const [isGeneratingPersonas, setIsGeneratingPersonas] = useState<boolean>(false);
+  const [scorecard, setScorecard] = useState<Scorecard | null>(null);
+  const [sharingMessage, setSharingMessage] = useState<Message | null>(null);
 
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -149,7 +226,7 @@ const App: React.FC = () => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, loadingAgent, announcingAgent]);
+  }, [messages, loadingAgent, announcingAgent, scorecard]);
 
   // This effect runs the main debate turns
   useEffect(() => {
@@ -197,6 +274,7 @@ const App: React.FC = () => {
               agentName: nextAgentConfig.name,
               text: response.text,
               sources: response.sources,
+              cheers: 0,
             },
           ]);
         } catch (e) {
@@ -216,7 +294,7 @@ const App: React.FC = () => {
 
   // This effect triggers the final verdict after the debate ends
   useEffect(() => {
-    const shouldGenerateVerdict = !isDebateActive && messages.length === totalTurns && topic;
+    const shouldGenerateVerdict = !isDebateActive && messages.length === totalTurns && topic && !scorecard;
 
     if (!shouldGenerateVerdict) return;
 
@@ -239,16 +317,43 @@ const App: React.FC = () => {
           language,
           allowProfanity
         );
-        setMessages((prev) => [
-          ...prev,
-          {
+        const verdictMessage = {
             id: `msg-final-${Date.now()}`,
             agent: AgentType.Orchestrator,
             agentName: orchestratorConfig.name,
             text: response.text,
             sources: response.sources,
-          },
-        ]);
+            cheers: 0,
+        };
+        setMessages((prev) => [...prev, verdictMessage]);
+
+        // --- Now generate scorecard ---
+        const finalHistory = [...messages, verdictMessage];
+
+        // 1. Client-side calculations
+        const sourceCounts: Record<string, number> = {};
+        finalHistory.forEach(msg => {
+            sourceCounts[msg.agentName] = (sourceCounts[msg.agentName] || 0) + msg.sources.length;
+        });
+        const mostCited = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1])[0];
+        
+        let audienceFav = finalHistory.filter(m => m.cheers > 0).sort((a, b) => b.cheers - a.cheers)[0];
+        if (!audienceFav && finalHistory.length > 0) audienceFav = finalHistory[Math.floor(Math.random() * (finalHistory.length-1)) + 1] // pick a random one if no cheers
+        
+        const scorecardSoFar: Scorecard = {
+            mostCitedAgent: mostCited ? { agentName: mostCited[0], count: mostCited[1] } : undefined,
+            audienceFavorite: audienceFav ? { agentName: audienceFav.agentName, quote: audienceFav.text.substring(0, 100) + '...', cheers: audienceFav.cheers } : undefined,
+        };
+
+        // 2. AI-powered highlights
+        try {
+            const highlights = await generateScorecardHighlights(topic, finalHistory, agents[AgentType.Confused].name);
+            setScorecard({ ...scorecardSoFar, ...highlights });
+        } catch (e) {
+            console.error("Could not generate AI highlights for scorecard, showing partial.", e);
+            setScorecard(scorecardSoFar); // Show partial scorecard on error
+        }
+
       } catch (e) {
         setError(e instanceof Error ? `Failed to get final verdict: ${e.message}` : 'An unknown error occurred.');
       } finally {
@@ -262,14 +367,16 @@ const App: React.FC = () => {
   }, [isDebateActive, messages.length, totalTurns, topic, language, allowProfanity]);
 
 
-  const handleStartDebate = () => {
-    if (userInput.trim().length < 10) {
+  const handleStartDebate = (rematchConfig: AgentCollection = agents) => {
+    if (userInput.trim().length < 10 && !topic) {
       setError('Please enter a more descriptive topic (at least 10 characters).');
       return;
     }
-    setTopic(userInput);
+    setTopic(userInput || topic);
     setMessages([]);
     setError(null);
+    setScorecard(null);
+    setAgents(rematchConfig);
     setIsDebateActive(true);
   };
 
@@ -288,6 +395,32 @@ const App: React.FC = () => {
     setShowCustomizer(false);
     setIsGeneratingAudio(false);
     setIsGeneratingVerdict(false);
+    setScorecard(null);
+  };
+  
+  const handleRematch = () => {
+    setMessages([]);
+    setError(null);
+    setScorecard(null);
+    setIsDebateActive(true);
+  };
+
+  const handleSwapSidesAndRematch = () => {
+    const swappedAgents: AgentCollection = { ...agents };
+    const proAgent = agents[AgentType.Pro];
+    const againstAgent = agents[AgentType.Against];
+    // Swap name and persona
+    swappedAgents[AgentType.Pro] = { ...proAgent, name: againstAgent.name, persona: againstAgent.persona };
+    swappedAgents[AgentType.Against] = { ...againstAgent, name: proAgent.name, persona: proAgent.persona };
+    
+    setAgents(swappedAgents);
+    // Use a timeout to ensure state has propagated before starting
+    setTimeout(() => {
+        setMessages([]);
+        setError(null);
+        setScorecard(null);
+        setIsDebateActive(true);
+    }, 100);
   };
 
   const handleAgentChange = (agentType: AgentType, field: 'name' | 'persona' | 'model', value: string) => {
@@ -441,10 +574,19 @@ const App: React.FC = () => {
     }
   };
 
+  const handleCheer = (messageId: string) => {
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, cheers: m.cheers + 1 } : m));
+  };
+
+  const handleShare = (message: Message) => {
+    setSharingMessage(message);
+  };
+
   const isDebateFinished = messages.length > totalTurns && !loadingAgent && !announcingAgent;
 
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col items-center p-4 md:p-8">
+      {sharingMessage && <ShareableQuoteCard message={sharingMessage} onClose={() => setSharingMessage(null)} />}
       <main className="w-full max-w-4xl h-full flex flex-col">
         <header className="text-center mb-8">
           <h1 className="text-5xl md:text-6xl font-display tracking-wider font-bold bg-clip-text text-transparent bg-gradient-to-r from-red-600 via-orange-500 to-amber-400 pb-2">
@@ -600,7 +742,7 @@ const App: React.FC = () => {
             </div>
 
             <button
-              onClick={handleStartDebate}
+              onClick={() => handleStartDebate()}
               disabled={isDebateActive}
               className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 transition-all duration-300 transform hover:scale-105 disabled:bg-gray-600 disabled:cursor-not-allowed mt-4 uppercase tracking-wider"
             >
@@ -617,7 +759,7 @@ const App: React.FC = () => {
 
             <div ref={scrollRef} className="flex-grow p-4 md:p-6 space-y-6 overflow-y-auto">
               {messages.map((msg) => (
-                <AgentMessage key={msg.id} message={msg} />
+                <AgentMessage key={msg.id} message={msg} onCheer={handleCheer} onShare={handleShare} isDebateFinished={isDebateFinished} />
               ))}
               {loadingAgent && (
                 <div className="flex items-center gap-3 text-gray-400 p-4">
@@ -630,11 +772,12 @@ const App: React.FC = () => {
                   </span>
                 </div>
               )}
-              {isDebateFinished && (
-                <div className="animate-fade-in text-center p-6 bg-gray-950/50 my-4 border border-orange-500/50">
-                  <h3 className="text-2xl font-bold text-orange-400">The Final Verdict Is In!</h3>
-                  <p className="text-slate-300 mt-2">Who won? The Orchestrator has spoken. You can now export the transcript or start a new fight.</p>
-                </div>
+              {scorecard && <ScorecardDisplay scorecard={scorecard} />}
+              {isDebateFinished && !scorecard && !isGeneratingVerdict && (
+                 <div className="animate-fade-in text-center p-6 bg-gray-950/50 my-4 border border-orange-500/50">
+                    <h3 className="text-2xl font-bold text-orange-400">The Final Verdict Is In!</h3>
+                    <p className="text-slate-300 mt-2">The Orchestrator has spoken. Generating the Post-Fight Report...</p>
+                 </div>
               )}
               {error && (
                 <div className="animate-fade-in text-center p-4 bg-rose-500/10 my-4 border border-rose-500/50 text-rose-400">
@@ -644,23 +787,25 @@ const App: React.FC = () => {
             </div>
 
             <div className="p-4 border-t border-gray-700 bg-gray-900">
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center flex-wrap gap-4">
                 <div className="text-sm text-gray-400">
                   Round {Math.min(numRounds, Math.floor(messages.length / AGENT_TURN_ORDER.length) + 1)} / {numRounds}
                 </div>
                 <div className="flex items-center gap-4">
                   {isDebateFinished && (
                     <>
+                      <button onClick={handleRematch} className="text-sm bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-3 transition-colors">Rematch!</button>
+                      <button onClick={handleSwapSidesAndRematch} className="text-sm bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold py-2 px-3 transition-colors">Swap Sides!</button>
                       <button 
                         onClick={handleGenerateAudio} 
-                        className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                        className="text-sm bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
                         disabled={isGeneratingAudio}
                       >
                         {isGeneratingAudio 
-                          ? `Generating Audio (${audioGenerationProgress}%)`
-                          : 'Download Audio'}
+                          ? `Audio (${audioGenerationProgress}%)`
+                          : 'Audio'}
                       </button>
-                      <button onClick={handleExport} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 transition-colors">Export Text</button>
+                      <button onClick={handleExport} className="text-sm bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 transition-colors">Export</button>
                     </>
                   )}
                   <button onClick={handleReset} className="bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-4 transition-colors">New Topic</button>

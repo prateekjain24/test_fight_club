@@ -21,6 +21,14 @@ const ConfusedIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM12.75 6a.75.75 0 00-1.5 0v6c0 .414.336.75.75.75h3a.75.75 0 000-1.5h-2.25V6z" clipRule="evenodd" /></svg>
 );
 
+const CheerIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M15.75 2.25c.38 0 .72.224 1.01.562a2.252 2.252 0 011.49 3.332l-2.47 7.82c-.22.699-.87 1.162-1.59 1.162H7.51c-1.01 0-1.84-.8-2.02-1.79l-1.05-5.01A2.25 2.25 0 016.7 5.25H9.75a.75.75 0 000-1.5H6.7c-2.04 0-3.68.8-4.63 2.25a4.48 4.48 0 00.17 5.08l1.05 5.01c.52 2.49 2.76 4.31 5.24 4.31H14.25c2.04 0 3.68-.8 4.63-2.25a4.48 4.48 0 00-.17-5.08l-2.47-7.82A3.752 3.752 0 0015.75 2.25z" /></svg>
+);
+
+const ShareIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
+);
+
 
 const AGENT_CONFIGS = {
   [AgentType.Orchestrator]: {
@@ -51,9 +59,12 @@ const AGENT_CONFIGS = {
 
 interface AgentMessageProps {
   message: Message;
+  onCheer: (messageId: string) => void;
+  onShare: (message: Message) => void;
+  isDebateFinished: boolean;
 }
 
-const AgentMessage: React.FC<AgentMessageProps> = ({ message }) => {
+const AgentMessage: React.FC<AgentMessageProps> = ({ message, onCheer, onShare, isDebateFinished }) => {
   const config = AGENT_CONFIGS[message.agent];
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(true);
@@ -86,10 +97,23 @@ const AgentMessage: React.FC<AgentMessageProps> = ({ message }) => {
   }, [message.id]); // Rerun effect if message ID changes
 
   return (
-    <div className={`animate-fade-in border-l-4 p-4 md:p-6 ${config.borderColor} ${config.bgColor} ${isTyping ? 'animate-pulse-fast' : ''}`}>
-      <div className="flex items-center gap-3 mb-3">
-        <div className={config.textColor}>{config.icon}</div>
-        <h3 className={`font-bold text-lg ${config.textColor}`}>{message.agentName}</h3>
+    <div className={`group animate-fade-in border-l-4 p-4 md:p-6 ${config.borderColor} ${config.bgColor} ${isTyping ? 'animate-pulse-fast' : ''}`}>
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="flex items-center gap-3">
+            <div className={config.textColor}>{config.icon}</div>
+            <h3 className={`font-bold text-lg ${config.textColor}`}>{message.agentName}</h3>
+        </div>
+        {!isTyping && isDebateFinished && (
+            <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={() => onCheer(message.id)} title="Cheer for this argument" className="flex items-center gap-1.5 text-slate-400 hover:text-amber-400 transition-colors p-1">
+                    <CheerIcon />
+                    {message.cheers > 0 && <span className="text-xs font-bold text-amber-500">{message.cheers}</span>}
+                </button>
+                <button onClick={() => onShare(message)} title="Share this quote" className="text-slate-400 hover:text-blue-400 transition-colors p-1">
+                    <ShareIcon />
+                </button>
+            </div>
+        )}
       </div>
       <p className="whitespace-pre-wrap text-slate-300 min-h-[24px]">{displayedText}{isTyping && <span className="inline-block w-2 h-4 bg-slate-400 ml-1 animate-pulse"></span>}</p>
       

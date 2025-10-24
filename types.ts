@@ -16,6 +16,7 @@ export interface Message {
   agentName: string; // The customizable name of the agent
   text: string;
   sources: Source[];
+  cheers: number;
 }
 
 export interface AgentConfig {
@@ -27,3 +28,15 @@ export interface AgentConfig {
 }
 
 export type AgentCollection = Record<AgentType, AgentConfig>;
+
+export interface ScorecardHighlight {
+  agentName: string;
+  quote: string;
+}
+
+export interface Scorecard {
+  mostSavageTakedown?: ScorecardHighlight;
+  wildestNonSequitur?: ScorecardHighlight;
+  mostCitedAgent?: { agentName: string; count: number };
+  audienceFavorite?: { agentName: string; quote: string; cheers: number };
+}
