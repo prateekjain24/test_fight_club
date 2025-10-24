@@ -17,7 +17,8 @@ const getPrompt = (
     topic: string,
     history: Message[],
     round: number,
-    totalRounds: number
+    totalRounds: number,
+    isFinalVerdict: boolean
 ): string => {
   const historyText = history.map(m => `${m.agentName}: ${m.text}`).join('\n\n---\n\n');
   const baseInstruction = `You are an AI agent in the AI AGENT FIGHT CLUB, a no-holds-barred verbal brawl. Your persona is over-the-top, theatrical, and aggressive. This is entertainment, so be sensational. ALWAYS use Google Search to ground your response, citing your sources to back up your verbal jabs.
@@ -28,6 +29,9 @@ IMPORTANT: Your entire response must be a single block of text suitable for text
 
   switch (agent) {
     case AgentType.Orchestrator:
+      if (isFinalVerdict) {
+        return `${baseInstruction}\n\nThe bloody debate on "${topic}" has concluded after ${totalRounds} brutal rounds. The transcript of the entire intellectual slaughter is below:\n${historyText}\n\nYour task is to act as the ultimate judge, the final word from on high. Review the entire debate with your cynical, chaos-loving eye and deliver a final, dramatic verdict. Announce the winner. Do not be impartial. Base your decision not on boring logic, but on who was most entertaining, savage, vicious, or gloriously absurd. Be theatrical, be decisive, be the Ringmaster this circus deserves. This is your grand finale. Make it count.`;
+      }
       if (round === 1) {
         return `${baseInstruction}\n\nYou are the master of ceremonies in this digital coliseum. The topic is a bloody battleground: "${topic}". Announce the topic with the gravity of a gladiatorial match. Hype up the crowd and command 'The Advocate' to land the first blow. Keep it under 120 words.`;
       }
@@ -43,6 +47,54 @@ IMPORTANT: Your entire response must be a single block of text suitable for text
   }
 };
 
+export const generateTrendingTopic = async (): Promise<string> => {
+  const prompt = `You are a 'Fight Starter' topic generator for a sensational AI debate app. Your primary goal is to find a fresh, currently trending, and highly debatable topic using Google Search. Phrase it as a controversial question. Look for what's buzzing in tech, pop culture, or social trends.
+
+Your response MUST be just the question. No preamble, no explanation, no quotation marks.
+
+If you absolutely cannot find a suitable trending topic, as a last resort, provide a classic, timeless controversial question like "Is free will an illusion?". But prioritize a trending one.`;
+
+  // Try up to 2 times to get a valid topic
+  for (let i = 0; i < 2; i++) {
+    try {
+      const response: GenerateContentResponse = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+          // FIX: The previous maxOutputTokens was too low (50), causing the model to run out of tokens
+          // after its internal "thinking" process, resulting in an empty response.
+          // Increase the limit and set a thinking budget to ensure enough tokens for the final output.
+          maxOutputTokens: 150,
+          thinkingConfig: { thinkingBudget: 50 },
+        },
+      });
+
+      const text = response.text;
+      
+      // If we get a valid text response, clean it up and return immediately.
+      if (text && text.trim().length > 0) {
+        return text.trim().replace(/["*]/g, '');
+      }
+
+      // If response is empty, log it and let the loop retry.
+      console.warn(`Trending topic generation attempt ${i + 1} returned no text. Retrying...`, response);
+      await new Promise(resolve => setTimeout(resolve, 300)); // Small delay before retry
+
+    } catch (error) {
+      console.error(`Error on trending topic generation attempt ${i + 1}:`, error);
+      // If an API error occurs, wait before retrying.
+      if (i < 1) {
+         await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    }
+  }
+  
+  // If we exit the loop, both attempts have failed.
+  throw new Error("The model couldn't cook up a hot topic right now. Please try again in a moment.");
+};
+
+
 export const getAgentResponse = async (
   agent: AgentType,
   agentName: string,
@@ -51,16 +103,19 @@ export const getAgentResponse = async (
   topic: string,
   history: Message[],
   round: number,
-  totalRounds: number
+  totalRounds: number,
+  isFinalVerdict: boolean = false
 ): Promise<{ text: string; sources: Source[] }> => {
-  const prompt = getPrompt(agent, agentName, persona, topic, history, round, totalRounds);
+  const prompt = getPrompt(agent, agentName, persona, topic, history, round, totalRounds, isFinalVerdict);
 
   const config: GenerateContentConfig = {
     tools: [{ googleSearch: {} }],
   };
 
   // Cap response size for agents to keep the debate punchy.
-  if (agent === AgentType.Orchestrator) {
+  if (isFinalVerdict) {
+    config.maxOutputTokens = 600;
+  } else if (agent === AgentType.Orchestrator) {
     config.maxOutputTokens = 400;
   } else {
     config.maxOutputTokens = 250;

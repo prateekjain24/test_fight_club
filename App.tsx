@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AgentMessage from './components/AgentMessage';
-import { getAgentResponse, generateDebateAudio } from './services/geminiService';
+import { getAgentResponse, generateDebateAudio, generateTrendingTopic } from './services/geminiService';
 import { AgentType } from './types';
 import type { Message, AgentCollection } from './types';
 
@@ -39,6 +39,14 @@ const DEFAULT_AGENTS: AgentCollection = {
     voice: 'Zephyr',
   }
 };
+
+const FIGHT_STARTER_TOPICS = [
+  'Is pineapple on pizza a culinary crime?',
+  'Cats vs. Dogs: The final showdown.',
+  'Are aliens living among us in disguise?',
+  'Should toilet paper hang over or under?',
+  'Is cereal a soup?',
+];
 
 // --- Audio Utility Functions ---
 
@@ -120,6 +128,8 @@ const App: React.FC = () => {
   const [agents, setAgents] = useState<AgentCollection>(DEFAULT_AGENTS);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState<boolean>(false);
   const [audioGenerationProgress, setAudioGenerationProgress] = useState<{ current: number; total: number } | null>(null);
+  const [isGeneratingVerdict, setIsGeneratingVerdict] = useState<boolean>(false);
+  const [isGeneratingTopic, setIsGeneratingTopic] = useState<boolean>(false);
 
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -131,14 +141,15 @@ const App: React.FC = () => {
     }
   }, [messages, loadingAgent, announcingAgent]);
 
+  // This effect runs the main debate turns
   useEffect(() => {
+    if (!isDebateActive) return;
+
     const runDebateTurn = async () => {
-      if (!isDebateActive || messages.length >= totalTurns || announcingAgent || loadingAgent) {
-        if (isDebateActive && messages.length >= totalTurns) {
-            setIsDebateActive(false);
-            setLoadingAgent(null);
-            setAnnouncingAgent(null);
-        }
+      if (announcingAgent || loadingAgent) return;
+
+      if (messages.length >= totalTurns) {
+        setIsDebateActive(false); // End of rounds, verdict effect will take over
         return;
       }
 
@@ -183,13 +194,58 @@ const App: React.FC = () => {
         }
       }, 2000); // Duration of the announcer animation
     };
-
-    if (isDebateActive) {
-      const timer = setTimeout(runDebateTurn, 500);
-      return () => clearTimeout(timer);
-    }
+    
+    const timer = setTimeout(runDebateTurn, 500);
+    return () => clearTimeout(timer);
+    
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDebateActive, messages, topic, numRounds, totalTurns, agents]);
+  }, [isDebateActive, messages, agents, topic, numRounds, totalTurns]);
+
+  // This effect triggers the final verdict after the debate ends
+  useEffect(() => {
+    const shouldGenerateVerdict = !isDebateActive && messages.length === totalTurns && topic;
+
+    if (!shouldGenerateVerdict) return;
+
+    const generateFinalVerdict = async () => {
+      const orchestratorConfig = agents[AgentType.Orchestrator];
+      setLoadingAgent(AgentType.Orchestrator);
+      setIsGeneratingVerdict(true);
+      setError(null);
+      try {
+        const response = await getAgentResponse(
+          AgentType.Orchestrator,
+          orchestratorConfig.name,
+          orchestratorConfig.persona,
+          orchestratorConfig.model,
+          topic,
+          messages,
+          numRounds,
+          numRounds,
+          true // isFinalVerdict
+        );
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg-final-${Date.now()}`,
+            agent: AgentType.Orchestrator,
+            agentName: orchestratorConfig.name,
+            text: response.text,
+            sources: response.sources,
+          },
+        ]);
+      } catch (e) {
+        setError(e instanceof Error ? `Failed to get final verdict: ${e.message}` : 'An unknown error occurred.');
+      } finally {
+        setLoadingAgent(null);
+        setIsGeneratingVerdict(false);
+      }
+    };
+
+    generateFinalVerdict();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDebateActive, messages.length, totalTurns, topic]);
+
 
   const handleStartDebate = () => {
     if (userInput.trim().length < 10) {
@@ -215,6 +271,7 @@ const App: React.FC = () => {
     setShowCustomizer(false);
     setIsGeneratingAudio(false);
     setAudioGenerationProgress(null);
+    setIsGeneratingVerdict(false);
   };
 
   const handleAgentChange = (agentType: AgentType, field: 'name' | 'persona' | 'model', value: string) => {
@@ -225,6 +282,19 @@ const App: React.FC = () => {
         [field]: value
       }
     }));
+  };
+
+  const handleGenerateTopic = async () => {
+    setIsGeneratingTopic(true);
+    setError(null);
+    try {
+      const topic = await generateTrendingTopic();
+      setUserInput(topic);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not generate a topic.');
+    } finally {
+      setIsGeneratingTopic(false);
+    }
   };
 
   const handleExport = () => {
@@ -298,7 +368,7 @@ const App: React.FC = () => {
     }
   };
 
-  const isDebateFinished = messages.length >= totalTurns && !loadingAgent && !announcingAgent;
+  const isDebateFinished = messages.length > totalTurns && !loadingAgent && !announcingAgent;
 
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col items-center p-4 md:p-8">
@@ -322,6 +392,39 @@ const App: React.FC = () => {
                   onKeyDown={(e) => e.key === 'Enter' && !isDebateActive && handleStartDebate()}
                 />
               </div>
+
+              <div className="mt-4">
+                <h4 className="text-sm font-semibold text-gray-400 mb-2">Or try a Fight Starter:</h4>
+                <div className="flex flex-wrap gap-2 items-center">
+                  {FIGHT_STARTER_TOPICS.map((starter) => (
+                    <button
+                      key={starter}
+                      onClick={() => setUserInput(starter)}
+                      className="text-xs bg-gray-700/50 hover:bg-gray-700/90 text-slate-300 px-3 py-1 transition-colors"
+                    >
+                      {starter}
+                    </button>
+                  ))}
+                  <button
+                    onClick={handleGenerateTopic}
+                    disabled={isGeneratingTopic}
+                    className="text-xs bg-orange-600/50 hover:bg-orange-600/80 text-orange-200 px-3 py-1 transition-colors font-semibold flex items-center gap-1.5 disabled:bg-gray-600 disabled:cursor-wait"
+                  >
+                    {isGeneratingTopic ? (
+                      <>
+                        <svg className="animate-spin h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Cooking up a hot take...</span>
+                      </>
+                    ) : (
+                      "Suggest a Hot Topic 🔥"
+                    )}
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label htmlFor="rounds-input" className="font-semibold text-slate-300 block mb-2">Number of Rounds (min 1):</label>
                 <input
@@ -392,13 +495,18 @@ const App: React.FC = () => {
               {loadingAgent && (
                 <div className="flex items-center gap-3 text-gray-400 p-4">
                   <div className="w-6 h-6 border-2 border-gray-500 border-t-gray-300 rounded-full animate-spin"></div>
-                  <span>{agents[loadingAgent]?.name || 'Agent'} is generating a response...</span>
+                  <span>
+                    {isGeneratingVerdict 
+                      ? `${agents[loadingAgent]?.name || 'Orchestrator'} is delivering the final verdict...`
+                      : `${agents[loadingAgent]?.name || 'Agent'} is generating a response...`
+                    }
+                  </span>
                 </div>
               )}
               {isDebateFinished && (
                 <div className="animate-fade-in text-center p-6 bg-gray-950/50 my-4 border border-orange-500/50">
-                  <h3 className="text-2xl font-bold text-orange-400">The Debate Has Concluded!</h3>
-                  <p className="text-slate-300 mt-2">Who won? You decide. You can export the transcript or start a new topic below.</p>
+                  <h3 className="text-2xl font-bold text-orange-400">The Final Verdict Is In!</h3>
+                  <p className="text-slate-300 mt-2">Who won? The Orchestrator has spoken. You can now export the transcript or start a new fight.</p>
                 </div>
               )}
               {error && (
