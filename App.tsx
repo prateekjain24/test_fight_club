@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AgentMessage from './components/AgentMessage';
-import { getAgentResponse, generateDebateAudio, generateTrendingTopic } from './services/geminiService';
+import { getAgentResponse, generateMessageAudio, generateTrendingTopic } from './services/geminiService';
 import { AgentType } from './types';
 import type { Message, AgentCollection } from './types';
 
@@ -129,6 +129,7 @@ const App: React.FC = () => {
   const [showCustomizer, setShowCustomizer] = useState<boolean>(false);
   const [agents, setAgents] = useState<AgentCollection>(DEFAULT_AGENTS);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState<boolean>(false);
+  const [audioGenerationProgress, setAudioGenerationProgress] = useState<number>(0);
   const [isGeneratingVerdict, setIsGeneratingVerdict] = useState<boolean>(false);
   const [isGeneratingTopic, setIsGeneratingTopic] = useState<boolean>(false);
 
@@ -336,19 +337,39 @@ const App: React.FC = () => {
     if (messages.length === 0) return;
     setIsGeneratingAudio(true);
     setError(null);
+    setAudioGenerationProgress(0);
+    const allAudioBytes: Uint8Array[] = [];
+
     try {
-      const audioBase64 = await generateDebateAudio(messages, agents);
-  
-      if (!audioBase64) {
-        throw new Error("Audio generation returned no data.");
+      const messagesToProcess = messages.filter(message => message.text.trim());
+      for (let i = 0; i < messagesToProcess.length; i++) {
+        const message = messagesToProcess[i];
+        const agentConfig = agents[message.agent];
+        
+        const audioBase64 = await generateMessageAudio(message, agentConfig);
+        
+        if (audioBase64) {
+          allAudioBytes.push(decode(audioBase64));
+        }
+        
+        setAudioGenerationProgress(Math.round(((i + 1) / messagesToProcess.length) * 100));
       }
-  
-      // Decode the base64 string into a byte array
-      const audioBytes = decode(audioBase64);
-  
-      // FIX: The TTS API returns raw PCM data, not MP3. Convert it to a WAV blob to make it playable.
+
+      if (allAudioBytes.length === 0) {
+        throw new Error("No audio data was generated for any messages.");
+      }
+
+      // Concatenate all PCM data chunks
+      const totalLength = allAudioBytes.reduce((acc, arr) => acc + arr.length, 0);
+      const combinedPcmData = new Uint8Array(totalLength);
+      let offset = 0;
+      for (const arr of allAudioBytes) {
+        combinedPcmData.set(arr, offset);
+        offset += arr.length;
+      }
+
       // Create WAV Blob and trigger download
-      const wavBlob = pcmToWavBlob(audioBytes, 24000, 1, 16);
+      const wavBlob = pcmToWavBlob(combinedPcmData, 24000, 1, 16);
       const url = URL.createObjectURL(wavBlob);
       const a = document.createElement('a');
       a.href = url;
@@ -358,10 +379,12 @@ const App: React.FC = () => {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+
     } catch (e) {
       setError(e instanceof Error ? `Audio generation failed: ${e.message}` : 'An unknown error occurred during audio generation.');
     } finally {
       setIsGeneratingAudio(false);
+      setAudioGenerationProgress(0);
     }
   };
 
@@ -549,7 +572,7 @@ const App: React.FC = () => {
                         disabled={isGeneratingAudio}
                       >
                         {isGeneratingAudio 
-                          ? `Generating Audio...`
+                          ? `Generating Audio (${audioGenerationProgress}%)`
                           : 'Download Audio'}
                       </button>
                       <button onClick={handleExport} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 transition-colors">Export Text</button>

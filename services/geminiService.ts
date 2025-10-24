@@ -1,6 +1,3 @@
-
-
-
 import { GoogleGenAI, GenerateContentConfig, Modality, GenerateContentResponse } from "@google/genai";
 import type { Message, Source, AgentCollection, AgentConfig } from '../types';
 import { AgentType } from '../types';
@@ -40,7 +37,7 @@ Your assigned name is "${agentName}". Your specific persona is: "${persona}". Em
 ${languageInstruction}
 ${profanityInstruction}
 
-To make your speech dynamic for text-to-speech, you MUST use bracketed markup tags like [sigh], [laughing], [shouting], [sarcasm], and [long pause]. These add vocalizations and change delivery. Use them creatively to embody your persona.
+To make your speech dynamic for text-to-speech, you MUST use bracketed markup tags like [sigh], [laughing], [shouting], [sarcasm], and [long pause]. These add vocalizations and change delivery. Use them creatively to embody your persona. CRITICAL RULE: These tags must ALWAYS be in English, even if the rest of your response is in another language (e.g., Hindi).
 
 IMPORTANT: Your entire response must be a single block of text suitable for text-to-speech. Do not use any markdown formatting (like asterisks for bolding, or hashtags for headers). Write as if you are speaking directly. Do not mention or list your sources in your spoken response; they are handled separately. Land your verbal punches quickly and concisely. No rambling.`;
 
@@ -190,43 +187,26 @@ export const getAgentResponse = async (
 };
 
 
-export const generateDebateAudio = async (
-  messages: Message[],
-  agents: AgentCollection
+export const generateMessageAudio = async (
+  message: Message,
+  agentConfig: AgentConfig
 ): Promise<string> => {
-  const messagesToProcess = messages.filter(message => message.text.trim());
-  if (messagesToProcess.length === 0) {
+  if (!message.text.trim()) {
     return "";
   }
 
-  // Create a single text prompt formatted for multi-speaker TTS
-  const conversationText = messagesToProcess
-    .map(msg => `${msg.agentName}: ${msg.text}`)
-    .join('\n\n');
-  const fullPrompt = `Synthesize the following debate. Apply the specified TTS prompts to each speaker's lines for a dramatic performance:\n\n${conversationText}`;
-
-  // Dynamically create the voice configuration for each agent
-  const uniqueAgents = Array.from(new Map(messagesToProcess.map(msg => [msg.agent, agents[msg.agent]])).values());
-  const speakerVoiceConfigs = uniqueAgents.map((agentConfig: AgentConfig) => ({
-      speaker: agentConfig.name,
-      voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: agentConfig.voice }
-      },
-      ttsPrompt: agentConfig.ttsPrompt
-  }));
+  // Prepend the agent's TTS style prompt to their dialogue for the model to interpret.
+  const fullPrompt = `${agentConfig.ttsPrompt} ${message.text}`;
 
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      // FIX: Use the correct model for text-to-speech.
       model: "gemini-2.5-flash-preview-tts",
       contents: [{ parts: [{ text: fullPrompt }] }],
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
-          // FIX: Removed `audioEncoding` and `speakingRate` as they are not supported properties.
-          // The API returns raw PCM audio data.
-          multiSpeakerVoiceConfig: {
-            speakerVoiceConfigs: speakerVoiceConfigs,
+          voiceConfig: { // Use single-speaker config
+            prebuiltVoiceConfig: { voiceName: agentConfig.voice },
           },
         },
       },
@@ -235,10 +215,10 @@ export const generateDebateAudio = async (
     if (base64Audio) {
       return base64Audio;
     } else {
-      throw new Error("API did not return audio data.");
+      throw new Error("API did not return audio data for this message.");
     }
   } catch (error) {
-    console.error(`Failed to generate debate audio`, error);
+    console.error(`Failed to generate audio for message "${message.id}"`, error);
     throw error;
   }
 };
