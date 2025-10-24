@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import AgentMessage from './components/AgentMessage';
 import { getAgentResponse, generateMessageAudio, generateTrendingTopic, generateRandomPersonas, generateScorecardHighlights } from './services/geminiService';
@@ -200,9 +201,9 @@ AgentMessage.ConfusedIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" viewB
 const App: React.FC = () => {
   const [topic, setTopic] = useState<string>('');
   const [userInput, setUserInput] = useState<string>('');
-  const [numRounds, setNumRounds] = useState<number>(5);
-  const [language, setLanguage] = useState<string>('English');
-  const [allowProfanity, setAllowProfanity] = useState<boolean>(false);
+  const [numRounds, setNumRounds] = useState<number>(3);
+  const [language, setLanguage] = useState<string>('Hindi');
+  const [allowProfanity, setAllowProfanity] = useState<boolean>(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isDebateActive, setIsDebateActive] = useState<boolean>(false);
   const [loadingAgent, setLoadingAgent] = useState<AgentType | null>(null);
@@ -387,9 +388,9 @@ const App: React.FC = () => {
     setMessages([]);
     setTopic('');
     setUserInput('');
-    setNumRounds(5);
-    setLanguage('English');
-    setAllowProfanity(false);
+    setNumRounds(3);
+    setLanguage('Hindi');
+    setAllowProfanity(true);
     setError(null);
     setAgents(DEFAULT_AGENTS);
     setShowCustomizer(false);
@@ -413,14 +414,15 @@ const App: React.FC = () => {
     swappedAgents[AgentType.Pro] = { ...proAgent, name: againstAgent.name, persona: againstAgent.persona };
     swappedAgents[AgentType.Against] = { ...againstAgent, name: proAgent.name, persona: proAgent.persona };
     
+    // Set all state for the new debate in a single batch.
+    // The setTimeout is not necessary and could cause race conditions.
+    // React batches these state updates and the debate's useEffect will
+    // run with the correct new state after the re-render.
     setAgents(swappedAgents);
-    // Use a timeout to ensure state has propagated before starting
-    setTimeout(() => {
-        setMessages([]);
-        setError(null);
-        setScorecard(null);
-        setIsDebateActive(true);
-    }, 100);
+    setMessages([]);
+    setError(null);
+    setScorecard(null);
+    setIsDebateActive(true);
   };
 
   const handleAgentChange = (agentType: AgentType, field: 'name' | 'persona' | 'model', value: string) => {

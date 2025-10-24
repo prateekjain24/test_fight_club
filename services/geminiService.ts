@@ -1,4 +1,5 @@
 
+
 import { GoogleGenAI, GenerateContentConfig, Modality, GenerateContentResponse, Type } from "@google/genai";
 import type { Message, Source, AgentCollection, AgentConfig, ScorecardHighlight } from '../types';
 import { AgentType } from '../types';
@@ -87,17 +88,9 @@ If you absolutely cannot find a suitable trending topic, as a last resort, provi
         },
       });
 
-      // --- DEBUG LOGGING START ---
-      console.log('[DEBUG] Raw API Response for Trending Topic:', JSON.stringify(response, null, 2));
-      // --- DEBUG LOGGING END ---
-
       // FIX: Use response.text to get the text content directly, per Gemini API guidelines.
       const text = response.text;
       
-      // --- DEBUG LOGGING START ---
-      console.log('[DEBUG] Aggregated Text for Trending Topic:', `"${text}"`);
-      // --- DEBUG LOGGING END ---
-
       if (text && text.trim().length > 0) {
         return text.trim().replace(/["*]/g, '');
       }
@@ -203,26 +196,18 @@ export const getAgentResponse = async (
       config: config,
     });
     
-    // --- DEBUG LOGGING START ---
-    console.log(`[DEBUG] Raw API Response for ${agentName}:`, JSON.stringify(response, null, 2));
-    // --- DEBUG LOGGING END ---
-
     // FIX: Use response.text to get the text content directly, per Gemini API guidelines.
     const text = response.text;
     
-    // --- DEBUG LOGGING START ---
-    console.log(`[DEBUG] Aggregated Text for ${agentName}:`, `"${text}"`);
-    // --- DEBUG LOGGING END ---
-    
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     
-    // FIX: Explicitly type the initial value in `reduce` to ensure the `sources` array is correctly typed as `Source[]`.
-    const sources = groundingChunks.reduce((acc: Source[], chunk) => {
+    // FIX: Correctly type the `reduce` operation to handle potentially untyped API response data and ensure `sources` is `Source[]`.
+    const sources = groundingChunks.reduce<Source[]>((acc, chunk: any) => {
         if (chunk.web && chunk.web.uri && chunk.web.title) {
             acc.push({ uri: chunk.web.uri, title: chunk.web.title });
         }
         return acc;
-    }, [] as Source[]);
+    }, []);
 
     const uniqueSources = Array.from(new Map(sources.map(s => [s.uri, s])).values());
 
