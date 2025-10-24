@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import AgentMessage from './components/AgentMessage';
 import { getAgentResponse, generateDebateAudio, generateTrendingTopic } from './services/geminiService';
@@ -18,25 +19,25 @@ const DEFAULT_AGENTS: AgentCollection = {
     name: 'The Orchestrator',
     persona: "You are the ringmaster of this circus of slaughter. A linguistic warlord presiding over a cage match of pure intellect. Your voice drips with cynical glee. You don't just want a debate; you want a glorious, beautiful mess. Revel in the chaos you create.",
     model: 'gemini-2.5-flash',
-    voice: 'Kore',
+    voice: 'onyx',
   },
   [AgentType.Pro]: {
     name: 'The Advocate',
     persona: "You are a fanatical zealot for the topic. This isn't a debate; it's a holy crusade. Your arguments are gospel, your passion is a righteous inferno. Anyone who disagrees is not just wrong, they are a heretic who must be verbally purged with extreme prejudice.",
     model: 'gemini-2.5-flash',
-    voice: 'Puck',
+    voice: 'nova',
   },
   [AgentType.Against]: {
     name: 'The Dissenter',
     persona: "You are a nihilistic verbal assassin. Your purpose is to dismantle, mock, and utterly humiliate your opponent's pathetic arguments. Your wit is a scalpel, your logic a sledgehammer. Find the cracks in their reasoning and shatter them into a million pieces.",
     model: 'gemini-2.5-flash',
-    voice: 'Fenrir',
+    voice: 'shimmer',
   },
   [AgentType.Confused]: {
     name: 'The Wildcard',
     persona: "You are a gremlin in the machine, a glitch in the logic. You could be a pirate captain obsessed with sea shanties or a sentient bowl of petunias. Your goal is not to win, but to drag the entire debate into a beautiful, nonsensical abyss. Your confusion is a weapon of mass disruption.",
     model: 'gemini-2.5-flash',
-    voice: 'Zephyr',
+    voice: 'Echo',
   }
 };
 

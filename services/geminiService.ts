@@ -1,5 +1,7 @@
 
 
+
+
 import { GoogleGenAI, GenerateContentConfig, Modality, GenerateContentResponse } from "@google/genai";
 import type { Message, Source, AgentCollection } from '../types';
 import { AgentType } from '../types';
@@ -65,8 +67,8 @@ If you absolutely cannot find a suitable trending topic, as a last resort, provi
           // FIX: The previous maxOutputTokens was too low (50), causing the model to run out of tokens
           // after its internal "thinking" process, resulting in an empty response.
           // Increase the limit and set a thinking budget to ensure enough tokens for the final output.
-          maxOutputTokens: 150,
-          thinkingConfig: { thinkingBudget: 50 },
+          maxOutputTokens: 350,
+          thinkingConfig: { thinkingBudget: 128 },
         },
       });
 
@@ -114,11 +116,11 @@ export const getAgentResponse = async (
 
   // Cap response size for agents to keep the debate punchy.
   if (isFinalVerdict) {
-    config.maxOutputTokens = 600;
+    config.maxOutputTokens = 900;
   } else if (agent === AgentType.Orchestrator) {
-    config.maxOutputTokens = 400;
+    config.maxOutputTokens = 600;
   } else {
-    config.maxOutputTokens = 250;
+    config.maxOutputTokens = 500;
   }
   
   // The minimum thinking budget for gemini-2.5-pro is 128.
@@ -126,7 +128,7 @@ export const getAgentResponse = async (
     config.thinkingConfig = { thinkingBudget: 128 };
   } else {
     // For flash, a smaller budget is fine.
-    config.thinkingConfig = { thinkingBudget: 100 };
+    config.thinkingConfig = { thinkingBudget: 128 };
   }
 
 
@@ -138,7 +140,11 @@ export const getAgentResponse = async (
       config: config,
     });
     
-    const text = response.text;
+    // FIX: If the API returns no text, response.text can be undefined.
+    // Using `?? ''` ensures that we always have a string, preventing the
+    // conversation history from being polluted with a literal "undefined"
+    // string in subsequent turns.
+    const text = response.text ?? '';
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     
     // FIX: Using a generic type argument `<Source[]>` on `reduce` is invalid syntax.
@@ -185,7 +191,7 @@ export const generateDebateAudio = async (
     try {
       // FIX: Add explicit type `GenerateContentResponse` to the API response for type safety.
       const response: GenerateContentResponse = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
+        model: "gemini-2.5-pro-tts",
         contents: [{ parts: [{ text: message.text }] }],
         config: {
           responseModalities: [Modality.AUDIO],
