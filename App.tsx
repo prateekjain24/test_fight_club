@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AgentMessage from './components/AgentMessage';
-import { getAgentResponse } from './services/geminiService';
+import { getAgentResponse, generateDebateAudio } from './services/geminiService';
 import { AgentType } from './types';
 import type { Message, AgentCollection } from './types';
 
@@ -18,23 +18,86 @@ const DEFAULT_AGENTS: AgentCollection = {
     name: 'The Orchestrator',
     persona: "You are the ringmaster of this circus of slaughter. A linguistic warlord presiding over a cage match of pure intellect. Your voice drips with cynical glee. You don't just want a debate; you want a glorious, beautiful mess. Revel in the chaos you create.",
     model: 'gemini-2.5-flash',
+    voice: 'Kore',
   },
   [AgentType.Pro]: {
     name: 'The Advocate',
     persona: "You are a fanatical zealot for the topic. This isn't a debate; it's a holy crusade. Your arguments are gospel, your passion is a righteous inferno. Anyone who disagrees is not just wrong, they are a heretic who must be verbally purged with extreme prejudice.",
     model: 'gemini-2.5-flash',
+    voice: 'Puck',
   },
   [AgentType.Against]: {
     name: 'The Dissenter',
     persona: "You are a nihilistic verbal assassin. Your purpose is to dismantle, mock, and utterly humiliate your opponent's pathetic arguments. Your wit is a scalpel, your logic a sledgehammer. Find the cracks in their reasoning and shatter them into a million pieces.",
     model: 'gemini-2.5-flash',
+    voice: 'Fenrir',
   },
   [AgentType.Confused]: {
     name: 'The Wildcard',
     persona: "You are a gremlin in the machine, a glitch in the logic. You could be a pirate captain obsessed with sea shanties or a sentient bowl of petunias. Your goal is not to win, but to drag the entire debate into a beautiful, nonsensical abyss. Your confusion is a weapon of mass disruption.",
     model: 'gemini-2.5-flash',
+    voice: 'Zephyr',
   }
 };
+
+// --- Audio Utility Functions ---
+
+// Decodes a base64 string into a Uint8Array.
+function decode(base64: string): Uint8Array {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+// Writes a string to a DataView at a specific offset.
+function writeString(view: DataView, offset: number, string: string) {
+  for (let i = 0; i < string.length; i++) {
+    view.setUint8(offset + i, string.charCodeAt(i));
+  }
+}
+
+// Creates a WAV file Blob from raw PCM audio data.
+function createWaveFile(pcmData: Uint8Array): Blob {
+  const sampleRate = 24000;
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = pcmData.length;
+  const fileSize = 36 + dataSize;
+
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  // RIFF header
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, fileSize, true);
+  writeString(view, 8, 'WAVE');
+
+  // fmt chunk
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true); // chunk size
+  view.setUint16(20, 1, true); // audio format (1 = PCM)
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+
+  // data chunk
+  writeString(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  // PCM data
+  new Uint8Array(buffer, 44).set(pcmData);
+
+  return new Blob([view], { type: 'audio/wav' });
+}
+
 
 const TurnAnnouncer: React.FC<{ agentName: string }> = ({ agentName }) => (
     <div className="absolute top-0 left-0 right-0 z-10 animate-announce">
@@ -55,6 +118,9 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showCustomizer, setShowCustomizer] = useState<boolean>(false);
   const [agents, setAgents] = useState<AgentCollection>(DEFAULT_AGENTS);
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState<boolean>(false);
+  const [audioGenerationProgress, setAudioGenerationProgress] = useState<{ current: number; total: number } | null>(null);
+
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const totalTurns = numRounds * AGENT_TURN_ORDER.length;
@@ -147,6 +213,8 @@ const App: React.FC = () => {
     setError(null);
     setAgents(DEFAULT_AGENTS);
     setShowCustomizer(false);
+    setIsGeneratingAudio(false);
+    setAudioGenerationProgress(null);
   };
 
   const handleAgentChange = (agentType: AgentType, field: 'name' | 'persona' | 'model', value: string) => {
@@ -185,6 +253,49 @@ const App: React.FC = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handleGenerateAudio = async () => {
+    if (messages.length === 0) return;
+    setIsGeneratingAudio(true);
+    setAudioGenerationProgress({ current: 0, total: messages.filter(m => m.text.trim()).length });
+    setError(null);
+    try {
+      const audioSegments = await generateDebateAudio(messages, agents, (current, total) => {
+        setAudioGenerationProgress({ current, total });
+      });
+
+      if (audioSegments.length === 0) {
+        throw new Error("Audio generation failed for all segments. Check the console for details.");
+      }
+  
+      // Decode and concatenate all audio segments
+      const decodedSegments = audioSegments.map(decode);
+      const totalLength = decodedSegments.reduce((sum, arr) => sum + arr.length, 0);
+      const combinedPcm = new Uint8Array(totalLength);
+      let offset = 0;
+      for (const segment of decodedSegments) {
+        combinedPcm.set(segment, offset);
+        offset += segment.length;
+      }
+  
+      // Create WAV file and trigger download
+      const wavBlob = createWaveFile(combinedPcm);
+      const url = URL.createObjectURL(wavBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      const sanitizedTopic = topic.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
+      a.download = `ai-debate-${sanitizedTopic || 'audio'}.wav`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof Error ? `Audio generation failed: ${e.message}` : 'An unknown error occurred during audio generation.');
+    } finally {
+      setIsGeneratingAudio(false);
+      setAudioGenerationProgress(null);
+    }
   };
 
   const isDebateFinished = messages.length >= totalTurns && !loadingAgent && !announcingAgent;
@@ -304,7 +415,18 @@ const App: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-4">
                   {isDebateFinished && (
-                    <button onClick={handleExport} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 transition-colors">Export</button>
+                    <>
+                      <button 
+                        onClick={handleGenerateAudio} 
+                        className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                        disabled={isGeneratingAudio}
+                      >
+                        {isGeneratingAudio 
+                          ? `Generating... (${audioGenerationProgress?.current ?? 0}/${audioGenerationProgress?.total ?? '?'})`
+                          : 'Download Audio'}
+                      </button>
+                      <button onClick={handleExport} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 transition-colors">Export Text</button>
+                    </>
                   )}
                   <button onClick={handleReset} className="bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-4 transition-colors">New Topic</button>
                 </div>

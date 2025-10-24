@@ -1,5 +1,6 @@
-import { GoogleGenAI, GenerateContentConfig } from "@google/genai";
-import type { Message, Source } from '../types';
+
+import { GoogleGenAI, GenerateContentConfig, Modality } from "@google/genai";
+import type { Message, Source, AgentCollection } from '../types';
 import { AgentType } from '../types';
 
 if (!process.env.API_KEY) {
@@ -72,12 +73,14 @@ export const getAgentResponse = async (
     const text = response.text;
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     
-    const sources = groundingChunks.reduce((acc, chunk) => {
+    // FIX: Use a generic type argument for `reduce` to ensure correct type inference for `sources`.
+    // The previous implementation could lead to `sources` being typed as `unknown[]` in some TypeScript configurations.
+    const sources = groundingChunks.reduce<Source[]>((acc, chunk) => {
         if (chunk.web && chunk.web.uri && chunk.web.title) {
             acc.push({ uri: chunk.web.uri, title: chunk.web.title });
         }
         return acc;
-    }, [] as Source[]);
+    }, []);
 
     // Deduplicate sources
     const uniqueSources = Array.from(new Map(sources.map(s => [s.uri, s])).values());
@@ -87,4 +90,58 @@ export const getAgentResponse = async (
     console.error("Error fetching agent response:", error);
     throw new Error(`Failed to get response from ${agentName}.`);
   }
+};
+
+
+export const generateDebateAudio = async (
+  messages: Message[],
+  agents: AgentCollection,
+  onProgress: (current: number, total: number) => void
+): Promise<string[]> => {
+  const agentConfigsByType = Object.fromEntries(
+    Object.entries(agents).map(([agentType, config]) => [agentType as AgentType, config])
+  );
+
+  const audioResults: string[] = [];
+  const messagesToProcess = messages.filter(message => message.text.trim());
+  const totalMessages = messagesToProcess.length;
+  let processedCount = 0;
+
+  for (const message of messagesToProcess) {
+    const agentConfig = agentConfigsByType[message.agent];
+    if (!agentConfig) {
+      console.error(`No config found for agent: ${message.agent}`);
+      continue; // Skip this message
+    }
+
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-preview-tts",
+        contents: [{ parts: [{ text: message.text }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: agentConfig.voice },
+            },
+          },
+        },
+      });
+      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (base64Audio) {
+        audioResults.push(base64Audio);
+      }
+    } catch (error) {
+      console.error(`Failed to generate audio for message: "${message.text.substring(0, 30)}..."`, error);
+      // Don't re-throw, just skip this segment and continue with the rest
+    }
+    
+    processedCount++;
+    onProgress(processedCount, totalMessages);
+
+    // Add a delay between API calls to avoid hitting rate limits.
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  return audioResults;
 };

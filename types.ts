@@ -22,6 +22,7 @@ export interface AgentConfig {
   name: string;
   persona: string;
   model: string;
+  voice: string;
 }
 
 export type AgentCollection = Record<AgentType, AgentConfig>;
