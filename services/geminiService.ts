@@ -66,8 +66,13 @@ export const getAgentResponse = async (
     config.maxOutputTokens = 250;
   }
   
-  // Reserve some tokens for thinking to ensure we get a quality response within the token limit.
-  config.thinkingConfig = { thinkingBudget: 100 };
+  // The minimum thinking budget for gemini-2.5-pro is 128.
+  if (model === 'gemini-2.5-pro') {
+    config.thinkingConfig = { thinkingBudget: 128 };
+  } else {
+    // For flash, a smaller budget is fine.
+    config.thinkingConfig = { thinkingBudget: 100 };
+  }
 
 
   try {
@@ -82,13 +87,13 @@ export const getAgentResponse = async (
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     
     // FIX: The generic type argument for `reduce` can cause errors if `groundingChunks` is not strongly typed.
-    // By typing the initial value of the accumulator, we can ensure the result of `reduce` is correctly typed as `Source[]`.
-    const sources = groundingChunks.reduce((acc, chunk) => {
+    // By providing a generic type argument to `reduce`, we can ensure the result is correctly typed as `Source[]`.
+    const sources = groundingChunks.reduce<Source[]>((acc, chunk) => {
         if (chunk.web && chunk.web.uri && chunk.web.title) {
             acc.push({ uri: chunk.web.uri, title: chunk.web.title });
         }
         return acc;
-    }, [] as Source[]);
+    }, []);
 
     // Deduplicate sources
     const uniqueSources = Array.from(new Map(sources.map(s => [s.uri, s])).values());
