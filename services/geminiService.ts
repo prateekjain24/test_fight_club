@@ -1,6 +1,8 @@
 
+
+
 import { GoogleGenAI, GenerateContentConfig, Modality, GenerateContentResponse } from "@google/genai";
-import type { Message, Source, AgentCollection } from '../types';
+import type { Message, Source, AgentCollection, AgentConfig } from '../types';
 import { AgentType } from '../types';
 
 if (!process.env.API_KEY) {
@@ -190,54 +192,53 @@ export const getAgentResponse = async (
 
 export const generateDebateAudio = async (
   messages: Message[],
-  agents: AgentCollection,
-  onProgress: (current: number, total: number) => void
-): Promise<string[]> => {
-  const agentConfigsByType = Object.fromEntries(
-    Object.entries(agents).map(([agentType, config]) => [agentType as AgentType, config])
-  );
-
-  const audioResults: string[] = [];
+  agents: AgentCollection
+): Promise<string> => {
   const messagesToProcess = messages.filter(message => message.text.trim());
-  const totalMessages = messagesToProcess.length;
-  let processedCount = 0;
-
-  for (const message of messagesToProcess) {
-    const agentConfig = agentConfigsByType[message.agent];
-    if (!agentConfig) {
-      console.error(`No config found for agent: ${message.agent}`);
-      continue;
-    }
-
-    try {
-      const ttsPrompt = agentConfig.ttsPrompt || '';
-      const fullContent = ttsPrompt ? `${ttsPrompt}: ${message.text}` : message.text;
-
-      const response: GenerateContentResponse = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: fullContent }] }],
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: agentConfig.voice },
-            },
-          },
-        },
-      });
-      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      if (base64Audio) {
-        audioResults.push(base64Audio);
-      }
-    } catch (error) {
-      console.error(`Failed to generate audio for message: "${message.text.substring(0, 30)}..."`, error);
-    }
-    
-    processedCount++;
-    onProgress(processedCount, totalMessages);
-
-    await new Promise(resolve => setTimeout(resolve, 500));
+  if (messagesToProcess.length === 0) {
+    return "";
   }
 
-  return audioResults;
+  // Create a single text prompt formatted for multi-speaker TTS
+  const conversationText = messagesToProcess
+    .map(msg => `${msg.agentName}: ${msg.text}`)
+    .join('\n\n');
+  const fullPrompt = `Synthesize the following debate. Apply the specified TTS prompts to each speaker's lines for a dramatic performance:\n\n${conversationText}`;
+
+  // Dynamically create the voice configuration for each agent
+  const uniqueAgents = Array.from(new Map(messagesToProcess.map(msg => [msg.agent, agents[msg.agent]])).values());
+  const speakerVoiceConfigs = uniqueAgents.map((agentConfig: AgentConfig) => ({
+      speaker: agentConfig.name,
+      voiceConfig: {
+          prebuiltVoiceConfig: { voiceName: agentConfig.voice }
+      },
+      ttsPrompt: agentConfig.ttsPrompt
+  }));
+
+  try {
+    const response: GenerateContentResponse = await ai.models.generateContent({
+      // FIX: Use the correct model for text-to-speech.
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text: fullPrompt }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          // FIX: Removed `audioEncoding` and `speakingRate` as they are not supported properties.
+          // The API returns raw PCM audio data.
+          multiSpeakerVoiceConfig: {
+            speakerVoiceConfigs: speakerVoiceConfigs,
+          },
+        },
+      },
+    });
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (base64Audio) {
+      return base64Audio;
+    } else {
+      throw new Error("API did not return audio data.");
+    }
+  } catch (error) {
+    console.error(`Failed to generate debate audio`, error);
+    throw error;
+  }
 };

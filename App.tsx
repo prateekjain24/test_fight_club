@@ -65,51 +65,47 @@ function decode(base64: string): Uint8Array {
   return bytes;
 }
 
-// Writes a string to a DataView at a specific offset.
+// FIX: Added utility functions to convert raw PCM audio data from the API into a playable WAV file.
 function writeString(view: DataView, offset: number, string: string) {
   for (let i = 0; i < string.length; i++) {
     view.setUint8(offset + i, string.charCodeAt(i));
   }
 }
 
-// Creates a WAV file Blob from raw PCM audio data.
-function createWaveFile(pcmData: Uint8Array): Blob {
-  const sampleRate = 24000;
-  const numChannels = 1;
-  const bitsPerSample = 16;
-  const blockAlign = (numChannels * bitsPerSample) / 8;
-  const byteRate = sampleRate * blockAlign;
-  const dataSize = pcmData.length;
-  const fileSize = 36 + dataSize;
-
+function pcmToWavBlob(pcmData: Uint8Array, sampleRate: number, numChannels: number, bitsPerSample: number): Blob {
+  const dataSize = pcmData.byteLength;
   const buffer = new ArrayBuffer(44 + dataSize);
   const view = new DataView(buffer);
 
-  // RIFF header
+  const blockAlign = numChannels * (bitsPerSample / 8);
+  const byteRate = sampleRate * blockAlign;
+
+  // RIFF chunk descriptor
   writeString(view, 0, 'RIFF');
-  view.setUint32(4, fileSize, true);
+  view.setUint32(4, 36 + dataSize, true); // true for little-endian
   writeString(view, 8, 'WAVE');
 
-  // fmt chunk
+  // "fmt " sub-chunk
   writeString(view, 12, 'fmt ');
-  view.setUint32(16, 16, true); // chunk size
-  view.setUint16(20, 1, true); // audio format (1 = PCM)
+  view.setUint32(16, 16, true); // Subchunk1Size for PCM
+  view.setUint16(20, 1, true); // AudioFormat (1 for PCM)
   view.setUint16(22, numChannels, true);
   view.setUint32(24, sampleRate, true);
   view.setUint32(28, byteRate, true);
   view.setUint16(32, blockAlign, true);
   view.setUint16(34, bitsPerSample, true);
 
-  // data chunk
+  // "data" sub-chunk
   writeString(view, 36, 'data');
   view.setUint32(40, dataSize, true);
 
-  // PCM data
-  new Uint8Array(buffer, 44).set(pcmData);
+  // Write PCM data
+  for (let i = 0; i < pcmData.length; i++) {
+    view.setUint8(44 + i, pcmData[i]);
+  }
 
   return new Blob([view], { type: 'audio/wav' });
 }
-
 
 const TurnAnnouncer: React.FC<{ agentName: string }> = ({ agentName }) => (
     <div className="absolute top-0 left-0 right-0 z-10 animate-announce">
@@ -133,7 +129,6 @@ const App: React.FC = () => {
   const [showCustomizer, setShowCustomizer] = useState<boolean>(false);
   const [agents, setAgents] = useState<AgentCollection>(DEFAULT_AGENTS);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState<boolean>(false);
-  const [audioGenerationProgress, setAudioGenerationProgress] = useState<{ current: number; total: number } | null>(null);
   const [isGeneratingVerdict, setIsGeneratingVerdict] = useState<boolean>(false);
   const [isGeneratingTopic, setIsGeneratingTopic] = useState<boolean>(false);
 
@@ -283,7 +278,6 @@ const App: React.FC = () => {
     setAgents(DEFAULT_AGENTS);
     setShowCustomizer(false);
     setIsGeneratingAudio(false);
-    setAudioGenerationProgress(null);
     setIsGeneratingVerdict(false);
   };
 
@@ -341,29 +335,20 @@ const App: React.FC = () => {
   const handleGenerateAudio = async () => {
     if (messages.length === 0) return;
     setIsGeneratingAudio(true);
-    setAudioGenerationProgress({ current: 0, total: messages.filter(m => m.text.trim()).length });
     setError(null);
     try {
-      const audioSegments = await generateDebateAudio(messages, agents, (current, total) => {
-        setAudioGenerationProgress({ current, total });
-      });
-
-      if (audioSegments.length === 0) {
-        throw new Error("Audio generation failed for all segments. Check the console for details.");
+      const audioBase64 = await generateDebateAudio(messages, agents);
+  
+      if (!audioBase64) {
+        throw new Error("Audio generation returned no data.");
       }
   
-      // Decode and concatenate all audio segments
-      const decodedSegments = audioSegments.map(decode);
-      const totalLength = decodedSegments.reduce((sum, arr) => sum + arr.length, 0);
-      const combinedPcm = new Uint8Array(totalLength);
-      let offset = 0;
-      for (const segment of decodedSegments) {
-        combinedPcm.set(segment, offset);
-        offset += segment.length;
-      }
+      // Decode the base64 string into a byte array
+      const audioBytes = decode(audioBase64);
   
-      // Create WAV file and trigger download
-      const wavBlob = createWaveFile(combinedPcm);
+      // FIX: The TTS API returns raw PCM data, not MP3. Convert it to a WAV blob to make it playable.
+      // Create WAV Blob and trigger download
+      const wavBlob = pcmToWavBlob(audioBytes, 24000, 1, 16);
       const url = URL.createObjectURL(wavBlob);
       const a = document.createElement('a');
       a.href = url;
@@ -377,7 +362,6 @@ const App: React.FC = () => {
       setError(e instanceof Error ? `Audio generation failed: ${e.message}` : 'An unknown error occurred during audio generation.');
     } finally {
       setIsGeneratingAudio(false);
-      setAudioGenerationProgress(null);
     }
   };
 
@@ -475,7 +459,7 @@ const App: React.FC = () => {
             <div>
               <button onClick={() => setShowCustomizer(!showCustomizer)} className="text-red-400 font-semibold hover:text-red-300 transition-colors w-full text-left flex justify-between items-center">
                 <span>The Promoter's Corner (Customize Agents)</span>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 transition-transform ${showCustomizer ? 'rotate-180' : ''}`}><path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" /></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="http://www.w3.org/2000/svg" fill="currentColor" className={`w-5 h-5 transition-transform ${showCustomizer ? 'rotate-180' : ''}`}><path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" /></svg>
               </button>
               {showCustomizer && (
                 <div className="mt-4 space-y-4 animate-fade-in">
@@ -565,7 +549,7 @@ const App: React.FC = () => {
                         disabled={isGeneratingAudio}
                       >
                         {isGeneratingAudio 
-                          ? `Generating... (${audioGenerationProgress?.current ?? 0}/${audioGenerationProgress?.total ?? '?'})`
+                          ? `Generating Audio...`
                           : 'Download Audio'}
                       </button>
                       <button onClick={handleExport} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 transition-colors">Export Text</button>
