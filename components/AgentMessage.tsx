@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import type { Message } from '../types';
 import { AgentType } from '../types';
@@ -66,7 +67,11 @@ const AgentMessage: React.FC<AgentMessageProps> = ({ message }) => {
       
       const intervalId = setInterval(() => {
         if (currentWordIndex < words.length) {
-          setDisplayedText(prev => prev + (prev ? ' ' : '') + words[currentWordIndex]);
+          const word = words[currentWordIndex];
+          // Add a guard to prevent "undefined" from being displayed
+          if (typeof word !== 'undefined') {
+            setDisplayedText(prev => prev + (prev ? ' ' : '') + word);
+          }
           currentWordIndex++;
         } else {
           clearInterval(intervalId);

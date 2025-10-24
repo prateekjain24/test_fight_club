@@ -1,7 +1,5 @@
 
 
-
-
 import { GoogleGenAI, GenerateContentConfig, Modality, GenerateContentResponse } from "@google/genai";
 import type { Message, Source, AgentCollection } from '../types';
 import { AgentType } from '../types';
@@ -64,35 +62,37 @@ If you absolutely cannot find a suitable trending topic, as a last resort, provi
         contents: prompt,
         config: {
           tools: [{ googleSearch: {} }],
-          // FIX: The previous maxOutputTokens was too low (50), causing the model to run out of tokens
-          // after its internal "thinking" process, resulting in an empty response.
-          // Increase the limit and set a thinking budget to ensure enough tokens for the final output.
           maxOutputTokens: 350,
           thinkingConfig: { thinkingBudget: 128 },
         },
       });
 
+      // --- DEBUG LOGGING START ---
+      console.log('[DEBUG] Raw API Response for Trending Topic:', JSON.stringify(response, null, 2));
+      // --- DEBUG LOGGING END ---
+
+      // FIX: Use response.text to get the text content directly, per Gemini API guidelines.
       const text = response.text;
       
-      // If we get a valid text response, clean it up and return immediately.
+      // --- DEBUG LOGGING START ---
+      console.log('[DEBUG] Aggregated Text for Trending Topic:', `"${text}"`);
+      // --- DEBUG LOGGING END ---
+
       if (text && text.trim().length > 0) {
         return text.trim().replace(/["*]/g, '');
       }
 
-      // If response is empty, log it and let the loop retry.
       console.warn(`Trending topic generation attempt ${i + 1} returned no text. Retrying...`, response);
-      await new Promise(resolve => setTimeout(resolve, 300)); // Small delay before retry
+      await new Promise(resolve => setTimeout(resolve, 300));
 
     } catch (error) {
       console.error(`Error on trending topic generation attempt ${i + 1}:`, error);
-      // If an API error occurs, wait before retrying.
       if (i < 1) {
          await new Promise(resolve => setTimeout(resolve, 300));
       }
     }
   }
   
-  // If we exit the loop, both attempts have failed.
   throw new Error("The model couldn't cook up a hot topic right now. Please try again in a moment.");
 };
 
@@ -114,7 +114,6 @@ export const getAgentResponse = async (
     tools: [{ googleSearch: {} }],
   };
 
-  // Cap response size for agents to keep the debate punchy.
   if (isFinalVerdict) {
     config.maxOutputTokens = 900;
   } else if (agent === AgentType.Orchestrator) {
@@ -123,32 +122,33 @@ export const getAgentResponse = async (
     config.maxOutputTokens = 500;
   }
   
-  // The minimum thinking budget for gemini-2.5-pro is 128.
   if (model === 'gemini-2.5-pro') {
     config.thinkingConfig = { thinkingBudget: 128 };
   } else {
-    // For flash, a smaller budget is fine.
     config.thinkingConfig = { thinkingBudget: 128 };
   }
 
-
   try {
-    // FIX: Add explicit type `GenerateContentResponse` to the API response.
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: model,
       contents: prompt,
       config: config,
     });
     
-    // FIX: If the API returns no text, response.text can be undefined.
-    // Using `?? ''` ensures that we always have a string, preventing the
-    // conversation history from being polluted with a literal "undefined"
-    // string in subsequent turns.
-    const text = response.text ?? '';
+    // --- DEBUG LOGGING START ---
+    console.log(`[DEBUG] Raw API Response for ${agentName}:`, JSON.stringify(response, null, 2));
+    // --- DEBUG LOGGING END ---
+
+    // FIX: Use response.text to get the text content directly, per Gemini API guidelines.
+    const text = response.text;
+    
+    // --- DEBUG LOGGING START ---
+    console.log(`[DEBUG] Aggregated Text for ${agentName}:`, `"${text}"`);
+    // --- DEBUG LOGGING END ---
+    
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     
-    // FIX: Using a generic type argument `<Source[]>` on `reduce` is invalid syntax.
-    // The correct way to type the result of `reduce` with an array accumulator is to type the initial value.
+    // FIX: Provide a typed initial value to `reduce` to ensure `sources` is correctly typed as `Source[]`.
     const sources = groundingChunks.reduce((acc, chunk) => {
         if (chunk.web && chunk.web.uri && chunk.web.title) {
             acc.push({ uri: chunk.web.uri, title: chunk.web.title });
@@ -156,7 +156,6 @@ export const getAgentResponse = async (
         return acc;
     }, [] as Source[]);
 
-    // Deduplicate sources
     const uniqueSources = Array.from(new Map(sources.map(s => [s.uri, s])).values());
 
     return { text, sources: uniqueSources };
@@ -185,13 +184,12 @@ export const generateDebateAudio = async (
     const agentConfig = agentConfigsByType[message.agent];
     if (!agentConfig) {
       console.error(`No config found for agent: ${message.agent}`);
-      continue; // Skip this message
+      continue;
     }
 
     try {
-      // FIX: Add explicit type `GenerateContentResponse` to the API response for type safety.
       const response: GenerateContentResponse = await ai.models.generateContent({
-        model: "gemini-2.5-pro-tts",
+        model: "gemini-2.5-flash-preview-tts",
         contents: [{ parts: [{ text: message.text }] }],
         config: {
           responseModalities: [Modality.AUDIO],
@@ -208,13 +206,11 @@ export const generateDebateAudio = async (
       }
     } catch (error) {
       console.error(`Failed to generate audio for message: "${message.text.substring(0, 30)}..."`, error);
-      // Don't re-throw, just skip this segment and continue with the rest
     }
     
     processedCount++;
     onProgress(processedCount, totalMessages);
 
-    // Add a delay between API calls to avoid hitting rate limits.
     await new Promise(resolve => setTimeout(resolve, 500));
   }
 
