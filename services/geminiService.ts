@@ -1,5 +1,6 @@
 
-import { GoogleGenAI, GenerateContentConfig, Modality } from "@google/genai";
+
+import { GoogleGenAI, GenerateContentConfig, Modality, GenerateContentResponse } from "@google/genai";
 import type { Message, Source, AgentCollection } from '../types';
 import { AgentType } from '../types';
 
@@ -21,7 +22,9 @@ const getPrompt = (
   const historyText = history.map(m => `${m.agentName}: ${m.text}`).join('\n\n---\n\n');
   const baseInstruction = `You are an AI agent in the AI AGENT FIGHT CLUB, a no-holds-barred verbal brawl. Your persona is over-the-top, theatrical, and aggressive. This is entertainment, so be sensational. ALWAYS use Google Search to ground your response, citing your sources to back up your verbal jabs.
   
-Your assigned name is "${agentName}". Your specific persona is: "${persona}". Embody this persona completely in your response.`;
+Your assigned name is "${agentName}". Your specific persona is: "${persona}". Embody this persona completely in your response.
+
+IMPORTANT: Your entire response must be a single block of text suitable for text-to-speech. Do not use any markdown formatting (like asterisks for bolding, or hashtags for headers). Write as if you are speaking directly. Do not mention or list your sources in your spoken response; they are handled separately.`;
 
   switch (agent) {
     case AgentType.Orchestrator:
@@ -56,15 +59,20 @@ export const getAgentResponse = async (
     tools: [{ googleSearch: {} }],
   };
 
-  // Cap response size for all agents except the orchestrator to keep the debate punchy.
-  if (agent !== AgentType.Orchestrator) {
+  // Cap response size for agents to keep the debate punchy.
+  if (agent === AgentType.Orchestrator) {
     config.maxOutputTokens = 400;
-    // Reserve some tokens for thinking to ensure we get a quality response within the token limit.
-    config.thinkingConfig = { thinkingBudget: 100 };
+  } else {
+    config.maxOutputTokens = 250;
   }
+  
+  // Reserve some tokens for thinking to ensure we get a quality response within the token limit.
+  config.thinkingConfig = { thinkingBudget: 100 };
+
 
   try {
-    const response = await ai.models.generateContent({
+    // FIX: Add explicit type `GenerateContentResponse` to the API response.
+    const response: GenerateContentResponse = await ai.models.generateContent({
       model: model,
       contents: prompt,
       config: config,
@@ -73,14 +81,14 @@ export const getAgentResponse = async (
     const text = response.text;
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     
-    // FIX: Use a generic type argument for `reduce` to ensure correct type inference for `sources`.
-    // The previous implementation could lead to `sources` being typed as `unknown[]` in some TypeScript configurations.
-    const sources = groundingChunks.reduce<Source[]>((acc, chunk) => {
+    // FIX: The generic type argument for `reduce` can cause errors if `groundingChunks` is not strongly typed.
+    // By typing the initial value of the accumulator, we can ensure the result of `reduce` is correctly typed as `Source[]`.
+    const sources = groundingChunks.reduce((acc, chunk) => {
         if (chunk.web && chunk.web.uri && chunk.web.title) {
             acc.push({ uri: chunk.web.uri, title: chunk.web.title });
         }
         return acc;
-    }, []);
+    }, [] as Source[]);
 
     // Deduplicate sources
     const uniqueSources = Array.from(new Map(sources.map(s => [s.uri, s])).values());
@@ -115,7 +123,8 @@ export const generateDebateAudio = async (
     }
 
     try {
-      const response = await ai.models.generateContent({
+      // FIX: Add explicit type `GenerateContentResponse` to the API response for type safety.
+      const response: GenerateContentResponse = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
         contents: [{ parts: [{ text: message.text }] }],
         config: {
