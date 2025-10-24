@@ -1,4 +1,5 @@
-import { GoogleGenAI, GenerateContentConfig, Modality, GenerateContentResponse } from "@google/genai";
+
+import { GoogleGenAI, GenerateContentConfig, Modality, GenerateContentResponse, Type } from "@google/genai";
 import type { Message, Source, AgentCollection, AgentConfig } from '../types';
 import { AgentType } from '../types';
 
@@ -115,6 +116,52 @@ If you absolutely cannot find a suitable trending topic, as a last resort, provi
   throw new Error("The model couldn't cook up a hot topic right now. Please try again in a moment.");
 };
 
+export const generateRandomPersonas = async (): Promise<{ name: string; persona: string }[]> => {
+  const prompt = `You are a creative director for the "AI Agent Fight Club," a sensational debate show. Generate four distinct, over-the-top, theatrical, and aggressive debater personas. They should be unique and memorable. One should be a cynical host, one a passionate advocate, one a cold-hearted debunker, and one an agent of chaos.
+
+Provide your answer as a JSON array of objects, where each object has a "name" (a cool title like "The Demolitionist") and a "persona" (a 1-2 sentence description of their style and personality for the AI to embody).`;
+
+  try {
+    const response: GenerateContentResponse = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              name: {
+                type: Type.STRING,
+                description: "The agent's theatrical title."
+              },
+              persona: {
+                type: Type.STRING,
+                description: "A description of the agent's personality and debate style."
+              }
+            },
+            required: ["name", "persona"]
+          }
+        },
+      },
+    });
+
+    const text = response.text;
+    const personas = JSON.parse(text);
+
+    if (!Array.isArray(personas) || personas.length < 4) {
+      throw new Error("API returned an invalid format for personas.");
+    }
+    
+    return personas.slice(0, 4);
+
+  } catch (error) {
+    console.error("Error generating random personas:", error);
+    throw new Error("Failed to generate new personas. The model might be feeling uninspired.");
+  }
+};
+
 
 export const getAgentResponse = async (
   agent: AgentType,
@@ -169,13 +216,13 @@ export const getAgentResponse = async (
     
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     
-    // FIX: By providing a typed initial value to `reduce`, we ensure the accumulator `acc` and the result `sources` are correctly typed as `Source[]`.
-    const sources = groundingChunks.reduce((acc, chunk) => {
+    // FIX: Explicitly type the accumulator in `reduce` to ensure the `sources` array is correctly typed as `Source[]`.
+    const sources = groundingChunks.reduce((acc: Source[], chunk) => {
         if (chunk.web && chunk.web.uri && chunk.web.title) {
             acc.push({ uri: chunk.web.uri, title: chunk.web.title });
         }
         return acc;
-    }, [] as Source[]);
+    }, []);
 
     const uniqueSources = Array.from(new Map(sources.map(s => [s.uri, s])).values());
 

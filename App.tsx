@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AgentMessage from './components/AgentMessage';
-import { getAgentResponse, generateMessageAudio, generateTrendingTopic } from './services/geminiService';
+import { getAgentResponse, generateMessageAudio, generateTrendingTopic, generateRandomPersonas } from './services/geminiService';
 import { AgentType } from './types';
 import type { Message, AgentCollection } from './types';
 
@@ -51,6 +51,13 @@ const FIGHT_STARTER_TOPICS = [
   'Should toilet paper hang over or under?',
   'Is cereal a soup?',
 ];
+
+const DEBATE_PRESETS = {
+  'quick': { name: 'Quick Skirmish', rounds: 3, profanity: false },
+  'standard': { name: 'Standard Bout', rounds: 5, profanity: false },
+  'marathon': { name: 'Intellectual Marathon', rounds: 10, profanity: false },
+  'anarchy': { name: 'Total Anarchy', rounds: 7, profanity: true },
+};
 
 // --- Audio Utility Functions ---
 
@@ -132,6 +139,7 @@ const App: React.FC = () => {
   const [audioGenerationProgress, setAudioGenerationProgress] = useState<number>(0);
   const [isGeneratingVerdict, setIsGeneratingVerdict] = useState<boolean>(false);
   const [isGeneratingTopic, setIsGeneratingTopic] = useState<boolean>(false);
+  const [isGeneratingPersonas, setIsGeneratingPersonas] = useState<boolean>(false);
 
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -304,6 +312,51 @@ const App: React.FC = () => {
       setIsGeneratingTopic(false);
     }
   };
+  
+  const handlePresetSelect = (presetKey: keyof typeof DEBATE_PRESETS) => {
+    const preset = DEBATE_PRESETS[presetKey];
+    setNumRounds(preset.rounds);
+    setAllowProfanity(preset.profanity);
+    setError(null);
+
+    if (presetKey === 'marathon') {
+        const marathonAgents = (Object.keys(DEFAULT_AGENTS) as AgentType[]).reduce((acc, agentType) => {
+            acc[agentType] = { ...DEFAULT_AGENTS[agentType], model: 'gemini-2.5-pro' };
+            return acc;
+        }, {} as AgentCollection);
+        setAgents(marathonAgents);
+    } else if (presetKey === 'anarchy') {
+        const wildcardPersona = DEFAULT_AGENTS[AgentType.Confused].persona;
+        const anarchyAgents = (Object.keys(DEFAULT_AGENTS) as AgentType[]).reduce((acc, agentType) => {
+            acc[agentType] = { ...DEFAULT_AGENTS[agentType], persona: wildcardPersona };
+            return acc;
+        }, {} as AgentCollection);
+        setAgents(anarchyAgents);
+    } else {
+        setAgents(DEFAULT_AGENTS);
+    }
+  };
+
+  const handleGeneratePersonas = async () => {
+    setIsGeneratingPersonas(true);
+    setError(null);
+    try {
+        const newPersonas = await generateRandomPersonas();
+        
+        const randomizedAgents: AgentCollection = {
+            [AgentType.Orchestrator]: { ...agents[AgentType.Orchestrator], name: newPersonas[0].name, persona: newPersonas[0].persona },
+            [AgentType.Pro]: { ...agents[AgentType.Pro], name: newPersonas[1].name, persona: newPersonas[1].persona },
+            [AgentType.Against]: { ...agents[AgentType.Against], name: newPersonas[2].name, persona: newPersonas[2].persona },
+            [AgentType.Confused]: { ...agents[AgentType.Confused], name: newPersonas[3].name, persona: newPersonas[3].persona },
+        };
+        setAgents(randomizedAgents);
+
+    } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not generate personas.');
+    } finally {
+        setIsGeneratingPersonas(false);
+    }
+  };
 
   const handleExport = () => {
     if (messages.length === 0) return;
@@ -413,8 +466,8 @@ const App: React.FC = () => {
                 />
               </div>
 
-              <div className="mt-4">
-                <h4 className="text-sm font-semibold text-gray-400 mb-2">Or try a Fight Starter:</h4>
+              <div>
+                <h4 className="text-sm font-semibold text-gray-400 mb-2">Or get inspired:</h4>
                 <div className="flex flex-wrap gap-2 items-center">
                   {FIGHT_STARTER_TOPICS.map((starter) => (
                     <button
@@ -445,7 +498,23 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <h4 className="text-sm font-semibold text-gray-400 mb-2">Debate Presets:</h4>
+                <div className="flex flex-wrap gap-2 items-center">
+                  {Object.entries(DEBATE_PRESETS).map(([key, { name }]) => (
+                      <button
+                          key={key}
+                          onClick={() => handlePresetSelect(key as keyof typeof DEBATE_PRESETS)}
+                          className="text-xs bg-gray-700/50 hover:bg-gray-700/90 text-slate-300 px-3 py-1 transition-colors"
+                      >
+                          {name}
+                      </button>
+                  ))}
+                </div>
+              </div>
+
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                 <div>
                   <label htmlFor="rounds-input" className="font-semibold text-slate-300 block mb-2">Rounds:</label>
                   <input
@@ -509,7 +578,23 @@ const App: React.FC = () => {
                       </select>
                     </div>
                   ))}
-                   <button onClick={() => setAgents(DEFAULT_AGENTS)} className="text-sm text-rose-400 hover:text-rose-300">Reset to Defaults</button>
+                   <div className="flex items-center justify-between gap-4 mt-2">
+                      <button 
+                          onClick={handleGeneratePersonas}
+                          disabled={isGeneratingPersonas}
+                          className="text-sm text-orange-400 hover:text-orange-300 flex items-center gap-1.5 disabled:text-gray-500 disabled:cursor-wait"
+                      >
+                          {isGeneratingPersonas ? (
+                              <>
+                                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="http://www.w3.org/2000/svg"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                  <span>Generating...</span>
+                              </>
+                          ) : (
+                              "✨ Generate Random Personas"
+                          )}
+                      </button>
+                      <button onClick={() => setAgents(DEFAULT_AGENTS)} className="text-sm text-rose-400 hover:text-rose-300">Reset to Defaults</button>
+                   </div>
                 </div>
               )}
             </div>
