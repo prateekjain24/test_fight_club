@@ -1,5 +1,4 @@
 
-
 import { GoogleGenAI, GenerateContentConfig, Modality, GenerateContentResponse } from "@google/genai";
 import type { Message, Source, AgentCollection } from '../types';
 import { AgentType } from '../types';
@@ -18,12 +17,28 @@ const getPrompt = (
     history: Message[],
     round: number,
     totalRounds: number,
-    isFinalVerdict: boolean
+    isFinalVerdict: boolean,
+    language: string,
+    allowProfanity: boolean
 ): string => {
   const historyText = history.map(m => `${m.agentName}: ${m.text}`).join('\n\n---\n\n');
+  
+  const languageInstruction = language === 'Hindi'
+    ? "IMPORTANT: Your entire response MUST be in Hindi. Transliterate English terms if you must, but the primary language is Hindi."
+    : "Your entire response MUST be in English.";
+  
+  const profanityInstruction = allowProfanity
+    ? "You are encouraged to use strong language, insults, and even profanity to make your arguments more impactful and sensational. This is a no-holds-barred fight."
+    : "Keep your language clean. No profanity is allowed.";
+
   const baseInstruction = `You are an AI agent in the AI AGENT FIGHT CLUB, a no-holds-barred verbal brawl. Your persona is over-the-top, theatrical, and aggressive. This is entertainment, so be sensational. ALWAYS use Google Search to ground your response, citing your sources to back up your verbal jabs.
   
 Your assigned name is "${agentName}". Your specific persona is: "${persona}". Embody this persona completely in your response.
+
+${languageInstruction}
+${profanityInstruction}
+
+To make your speech dynamic for text-to-speech, you MUST use bracketed markup tags like [sigh], [laughing], [shouting], [sarcasm], and [long pause]. These add vocalizations and change delivery. Use them creatively to embody your persona.
 
 IMPORTANT: Your entire response must be a single block of text suitable for text-to-speech. Do not use any markdown formatting (like asterisks for bolding, or hashtags for headers). Write as if you are speaking directly. Do not mention or list your sources in your spoken response; they are handled separately. Land your verbal punches quickly and concisely. No rambling.`;
 
@@ -47,10 +62,15 @@ IMPORTANT: Your entire response must be a single block of text suitable for text
   }
 };
 
-export const generateTrendingTopic = async (): Promise<string> => {
+export const generateTrendingTopic = async (language: string = 'English'): Promise<string> => {
+  const languageInstruction = language === 'Hindi'
+    ? "The question MUST be in Hindi."
+    : "The question MUST be in English.";
+
   const prompt = `You are a 'Fight Starter' topic generator for a sensational AI debate app. Your primary goal is to find a fresh, currently trending, and highly debatable topic using Google Search. Phrase it as a controversial question. Look for what's buzzing in tech, pop culture, or social trends.
 
 Your response MUST be just the question. No preamble, no explanation, no quotation marks.
+${languageInstruction}
 
 If you absolutely cannot find a suitable trending topic, as a last resort, provide a classic, timeless controversial question like "Is free will an illusion?". But prioritize a trending one.`;
 
@@ -106,9 +126,11 @@ export const getAgentResponse = async (
   history: Message[],
   round: number,
   totalRounds: number,
-  isFinalVerdict: boolean = false
+  isFinalVerdict: boolean = false,
+  language: string = 'English',
+  allowProfanity: boolean = false
 ): Promise<{ text: string; sources: Source[] }> => {
-  const prompt = getPrompt(agent, agentName, persona, topic, history, round, totalRounds, isFinalVerdict);
+  const prompt = getPrompt(agent, agentName, persona, topic, history, round, totalRounds, isFinalVerdict, language, allowProfanity);
 
   const config: GenerateContentConfig = {
     tools: [{ googleSearch: {} }],
@@ -148,7 +170,7 @@ export const getAgentResponse = async (
     
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     
-    // FIX: Provide a typed initial value to `reduce` to ensure `sources` is correctly typed as `Source[]`.
+    // FIX: By providing a typed initial value to `reduce`, we ensure the accumulator `acc` and the result `sources` are correctly typed as `Source[]`.
     const sources = groundingChunks.reduce((acc, chunk) => {
         if (chunk.web && chunk.web.uri && chunk.web.title) {
             acc.push({ uri: chunk.web.uri, title: chunk.web.title });
@@ -188,9 +210,12 @@ export const generateDebateAudio = async (
     }
 
     try {
+      const ttsPrompt = agentConfig.ttsPrompt || '';
+      const fullContent = ttsPrompt ? `${ttsPrompt}: ${message.text}` : message.text;
+
       const response: GenerateContentResponse = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: message.text }] }],
+        contents: [{ parts: [{ text: fullContent }] }],
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {

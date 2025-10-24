@@ -23,6 +23,7 @@ export interface AgentConfig {
   persona: string;
   model: string;
   voice: string;
+  ttsPrompt: string;
 }
 
 export type AgentCollection = Record<AgentType, AgentConfig>;
