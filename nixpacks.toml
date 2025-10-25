@@ -1,0 +1,21 @@
+[variables]
+NPM_CONFIG_UPDATE_NOTIFIER = 'false'
+NPM_CONFIG_FUND = 'false'
+CADDY_VERSION = '2.8.4'
+
+[phases.setup]
+nixPkgs = ['...', 'curl']
+
+[phases.caddy]
+dependsOn = ['setup']
+cmds = [
+    'curl -fsSLo caddy.tar.gz "https://github.com/caddyserver/caddy/releases/download/v${CADDY_VERSION}/caddy_${CADDY_VERSION}_linux_amd64.tar.gz"',
+    'tar -zxvf caddy.tar.gz caddy',
+    'chmod +x caddy'
+]
+
+[phases.build]
+cmds = ['bun run build']
+
+[start]
+cmd = './caddy run --config Caddyfile --adapter caddyfile'
