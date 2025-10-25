@@ -191,15 +191,15 @@ export const getAgentResponse = async (
   };
 
   if (isFinalVerdict) {
-    config.maxOutputTokens = 1200; // ≈900 words for final verdict
+    config.maxOutputTokens = 1200; 
   } else if (agent === AgentType.Orchestrator && round === 1) {
-    config.maxOutputTokens = 200; // ≈150 words for intro
+    config.maxOutputTokens = 600; 
   } else if (agent === AgentType.Orchestrator) {
-    config.maxOutputTokens = 240; // ≈180 words for recaps
+    config.maxOutputTokens = 500; 
   } else if (agent === AgentType.Confused) {
-    config.maxOutputTokens = 160; // ≈120 words for chaos
+    config.maxOutputTokens = 300; 
   } else {
-    config.maxOutputTokens = 200; // ≈150 words for Pro/Against
+    config.maxOutputTokens = 400; 
   }
   
   if (model === 'gemini-2.5-pro') {
