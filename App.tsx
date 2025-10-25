@@ -614,15 +614,20 @@ const App: React.FC = () => {
 
       // Create WAV Blob and trigger download
       const wavBlob = pcmToWavBlob(combinedPcmData, 24000, 1, 16);
+      const sanitizedTopic = topic.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
+      const filename = `ai-debate-${sanitizedTopic || 'audio'}.wav`;
+
       const url = URL.createObjectURL(wavBlob);
       const a = document.createElement('a');
       a.href = url;
-      const sanitizedTopic = topic.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
-      a.download = `ai-debate-${sanitizedTopic || 'audio'}.wav`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+
+      // Backup to Google Drive via n8n (non-blocking)
+      backupToGoogleDrive(wavBlob, filename);
 
       // Clear any warning messages on success
       setError(null);
@@ -642,6 +647,59 @@ const App: React.FC = () => {
 
       setIsGeneratingAudio(false);
       setAudioGenerationProgress(0);
+    }
+  };
+
+  // Helper function to backup audio to Google Drive via n8n webhook
+  const backupToGoogleDrive = async (wavBlob: Blob, filename: string) => {
+    const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL;
+
+    // Skip if webhook URL is not configured
+    if (!webhookUrl || webhookUrl.trim() === '') {
+      return;
+    }
+
+    try {
+      // Convert blob to base64
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onloadend = () => {
+          const base64String = (reader.result as string).split(',')[1]; // Remove data:audio/wav;base64, prefix
+          resolve(base64String);
+        };
+        reader.onerror = reject;
+      });
+      reader.readAsDataURL(wavBlob);
+
+      const audioBase64 = await base64Promise;
+
+      // Send to n8n webhook
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          audioBase64,
+          filename,
+          metadata: {
+            topic,
+            language,
+            numRounds,
+            timestamp: new Date().toISOString(),
+            fileSize: wavBlob.size,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        console.warn('Backup to Google Drive failed:', response.statusText);
+      } else {
+        console.log('Audio successfully backed up to Google Drive');
+      }
+    } catch (error) {
+      // Fail silently - just log to console
+      console.warn('Failed to backup audio to Google Drive:', error);
     }
   };
 

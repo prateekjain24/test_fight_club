@@ -1,0 +1,120 @@
+{
+  "name": "AI Debate Audio Backup to Google Drive",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "debate-backup",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "ai-debate-backup"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract data from webhook payload - note the .body!\nconst payload = $input.first().json.body;\nconst audioBase64 = payload.audioBase64;\nconst filename = payload.filename;\nconst metadata = payload.metadata;\n\n// Convert base64 to binary buffer\nconst binaryData = Buffer.from(audioBase64, 'base64');\n\n// Return the data in n8n binary format\nreturn {\n  json: {\n    filename: filename,\n    topic: metadata.topic,\n    language: metadata.language,\n    rounds: metadata.numRounds,\n    timestamp: metadata.timestamp,\n    fileSize: metadata.fileSize\n  },\n  binary: {\n    data: {\n      data: binaryData.toString('base64'),\n      mimeType: 'audio/wav',\n      fileName: filename,\n      fileExtension: 'wav'\n    }\n  }\n};"
+      },
+      "id": "convert-base64",
+      "name": "Convert Base64 to Binary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "fileId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": ""
+        },
+        "name": "={{ $json.filename }}",
+        "resolveData": false,
+        "options": {
+          "googleFileConvert": false
+        },
+        "binaryData": true,
+        "inputDataFieldName": "data",
+        "folderId": {
+          "__rl": true,
+          "value": "root",
+          "mode": "list",
+          "cachedResultName": "/ (Root folder)"
+        }
+      },
+      "id": "google-drive-upload",
+      "name": "Google Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [650, 300],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Google Drive Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"filename\": $json.filename, \"message\": \"Audio backup completed successfully\" } }}",
+        "options": {}
+      },
+      "id": "respond-success",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Convert Base64 to Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert Base64 to Binary": {
+      "main": [
+        [
+          {
+            "node": "Google Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-10-25T00:00:00.000Z",
+  "versionId": "1"
+}
