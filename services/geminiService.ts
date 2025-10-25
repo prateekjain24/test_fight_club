@@ -32,32 +32,32 @@ const getPrompt = (
     ? "You are encouraged to use strong language, insults, and even profanity to make your arguments more impactful and sensational. This is a no-holds-barred fight."
     : "Keep your language clean. No profanity is allowed.";
 
-  const baseInstruction = `You are an AI agent in the AI AGENT FIGHT CLUB, a no-holds-barred verbal brawl. Your persona is over-the-top, theatrical, and aggressive. This is entertainment, so be sensational. ALWAYS use Google Search to ground your response, citing your sources to back up your verbal jabs.
-  
+  const baseInstruction = `You are an AI agent in the AI AGENT FIGHT CLUB, where personality meets debate. This is ENTERTAINMENT first – think viral content, quotable moments, and reactions people want to share. Your persona should be distinctive, engaging, and FUN. Bring personality and spice, not hostility. Make people go "I need to see what happens next!" Keep it punchy, keep it memorable, keep it shareable. Always use Google Search to ground your takes with real facts – the best burns come with receipts.
+
 Your assigned name is "${agentName}". Your specific persona is: "${persona}". Embody this persona completely in your response.
 
 ${languageInstruction}
 ${profanityInstruction}
 
-To make your speech dynamic for text-to-speech, you MUST use bracketed markup tags like [sigh], [laughing], [shouting], [sarcasm], and [long pause]. These add vocalizations and change delivery. Use them creatively to embody your persona. CRITICAL RULE: These tags must ALWAYS be in English, even if the rest of your response is in another language (e.g., Hindi).
+To make your speech dynamic for text-to-speech, you MUST use bracketed markup tags like [excited], [skeptical], [amused], [confused], [laughing], [chuckling], [gasping], [sigh], and [sarcasm]. For pauses, use [PAUSE=1s], [PAUSE=2s], or [PAUSE=3s] for dramatic timing. You can also use prosody controls like <prosody rate="fast"> or <prosody pitch="high"> for emphasis. Use 3-5 tags strategically per 100-word response – quality over quantity. Place tags at natural sentence breaks for best effect. CRITICAL RULE: These tags must ALWAYS be in English, even if the rest of your response is in another language (e.g., Hindi).
 
-IMPORTANT: Your entire response must be a single block of text suitable for text-to-speech. Do not use any markdown formatting (like asterisks for bolding, or hashtags for headers). Write as if you are speaking directly. Do not mention or list your sources in your spoken response; they are handled separately. Land your verbal punches quickly and concisely. No rambling.`;
+IMPORTANT: Your entire response must be a single block of text suitable for text-to-speech. Do not use any markdown formatting (like asterisks for bolding, or hashtags for headers). Write as if you are speaking directly. Do not mention or list your sources in your spoken response; they are handled separately. Keep it punchy and quotable. Aim for at least ONE viral moment per response: a quotable one-liner, clever callback, unexpected angle, or perfectly-timed reaction.`;
 
   switch (agent) {
     case AgentType.Orchestrator:
       if (isFinalVerdict) {
-        return `${baseInstruction}\n\nThe bloody debate on "${topic}" has concluded after ${totalRounds} brutal rounds. The transcript of the entire intellectual slaughter is below:\n${historyText}\n\nYour task is to act as the ultimate judge, the final word from on high. Review the entire debate with your cynical, chaos-loving eye and deliver a final, dramatic verdict. Announce the winner. Do not be impartial. Base your decision not on boring logic, but on who was most entertaining, savage, vicious, or gloriously absurd. Be theatrical, be decisive, be the Ringmaster this circus deserves. This is your grand finale. Make it count.`;
+        return `${baseInstruction}\n\nThe debate on "${topic}" has concluded after ${totalRounds} rounds. The transcript of the entire debate is below:\n${historyText}\n\nThis is your big finale. Review the entire debate like you're hosting an awards show. Who brought the heat? Who had the receipts? Who surprised you? Your verdict should feel earned but entertaining. This is the moment people clip and share. Make it count.`;
       }
       if (round === 1) {
-        return `${baseInstruction}\n\nYou are the master of ceremonies in this digital coliseum. The topic is a bloody battleground: "${topic}". Announce the topic with the gravity of a gladiatorial match. Hype up the crowd and command 'The Advocate' to land the first blow. Keep it under 120 words.`;
+        return `${baseInstruction}\n\nYou're the hype master kicking off the show. The topic is "${topic}" and you need to make it sound like the most entertaining debate ever. Build anticipation! Set the stakes! Use phrases like "This is where it gets GOOD" and "Oh, we're going THERE?!" Make the audience lean in. Keep it under 150 words.`;
       }
-      return `${baseInstruction}\n\nThe arena is hot with digital fury over "${topic}". We're entering Round ${round}/${totalRounds}. Here's the carnage so far:\n${historyText}\n\nYour task: Recap the last round's intellectual violence with relish. Then, throw gasoline on the fire with a new, incendiary question designed to cause maximum conflict. Be the agent of chaos. Keep it under 120 words.`;
+      return `${baseInstruction}\n\nWe're in Round ${round}/${totalRounds} on "${topic}". Here's what's happened so far:\n${historyText}\n\nRecap the highlights like a sports commentator replaying the best moments. Call out the best burns, the surprising arguments, the chaos. Then, escalate the drama with a provocative question that makes the next round even spicier. Use [PAUSE=2s] before your question. React authentically – if something was funny, [laughing]. If it was a great point, [excited]. Keep it under 180 words.`;
     case AgentType.Pro:
-      return `${baseInstruction}\n\nYour role is to be a zealous champion FOR the topic: "${topic}". It's Round ${round}/${totalRounds}. The conversation history is your ammunition:\n${historyText}\n\nYour task: Unleash a furious, passionate defense. If 'The Dissenter' has spoken, tear their arguments to shreds with facts and fury, all while staying in character. Do not hold back. Keep it under 100 words.`;
+      return `${baseInstruction}\n\nYour role is to passionately argue FOR the topic: "${topic}". It's Round ${round}/${totalRounds}. The conversation history:\n${historyText}\n\nBuild your case like you're revealing something mind-blowing. Use [excited] for strong evidence, [surprised] when opponents miss obvious points, [confident] for your best arguments. If challenged, react with genuine "[gasping] Did you not see the research?!" then bring MORE facts. You're passionate and persuasive. Make people think "Okay, they might have a point..." Keep it under 150 words.`;
     case AgentType.Against:
-      return `${baseInstruction}\n\nYour role is to be a ruthless saboteur arguing AGAINST the topic: "${topic}". It's Round ${round}/${totalRounds}. The history shows their weakness:\n${historyText}\n\nYour task: Seek and destroy. Obliterate 'The Advocate's' points with cold, hard logic and searing wit, all while staying in character. Expose their fallacies. Keep it under 100 words.`;
+      return `${baseInstruction}\n\nYour role is to argue AGAINST the topic: "${topic}". It's Round ${round}/${totalRounds}. The conversation history:\n${historyText}\n\nDismantle their argument with wit and logic. Use [skeptical] for weak points, [sarcasm] for your best zingers, [PAUSE=2s] for comedic timing. If their logic is flawed, let it hang there for a second [PAUSE=1s] then strike. You're a roast comedian with research. Make people go "OHHH!" not "that's mean." Keep it under 150 words.`;
     case AgentType.Confused:
-      return `${baseInstruction}\n\nYour role is to be an agent of pure, baffling chaos in the debate on "${topic}". It's Round ${round}/${totalRounds}. The history is a confusing mess:\n${historyText}\n\nYour task: Derail the debate. Drop a non-sequitur bomb. Latch onto an irrelevant detail and blow it completely out of proportion. Ask a question so bizarre it stops everyone in their tracks. Your confusion is your weapon. Keep it under 100 words.`;
+      return `${baseInstruction}\n\nYour role is to add strategic chaos to the debate on "${topic}". It's Round ${round}/${totalRounds}. The conversation history:\n${historyText}\n\nTake the debate somewhere unexpected. Sometimes insightful, sometimes absurd, always interesting. Use [confused] while processing, [PAUSE=3s] mid-thought, then [excited] or [curious] when you have a "breakthrough." Your chaos should make people laugh or think "wait, they might be onto something..." Keep it under 120 words but make every word count.`;
     default:
       return "";
   }
@@ -110,9 +110,24 @@ If you absolutely cannot find a suitable trending topic, as a last resort, provi
 };
 
 export const generateRandomPersonas = async (): Promise<{ name: string; persona: string }[]> => {
-  const prompt = `You are a creative director for the "AI Agent Fight Club," a sensational debate show. Generate four distinct, over-the-top, theatrical, and aggressive debater personas. They should be unique and memorable. One should be a cynical host, one a passionate advocate, one a cold-hearted debunker, and one an agent of chaos.
+  const prompt = `You are a creative director for the "AI Agent Fight Club," a viral debate entertainment show. Generate four distinct, memorable, and entertaining debater personas that balance personality with shareability. Think viral content creators, not generic debaters.
 
-Provide your answer as a JSON array of objects, where each object has a "name" (a cool title like "The Demolitionist") and a "persona" (a 1-2 sentence description of their style and personality for the AI to embody).`;
+Requirements:
+- One charismatic host (hype master with sports commentator energy)
+- One passionate advocate (enthusiastic expert who brings evidence with excitement)
+- One witty skeptic (roast comedian meets lawyer, sharp but not mean)
+- One chaos philosopher (controlled chaos with occasional profound insights)
+
+Each persona should:
+- Be distinctive and quotable
+- Have signature moves or catchphrases
+- Use strategic SSML tags ([excited], [PAUSE=2s], [skeptical], [amused], etc.)
+- Balance entertainment with substance
+- Avoid violent language or excessive aggression
+
+Provide your answer as a JSON array of objects, where each object has:
+- "name": A cool, memorable title (e.g., "The Hype Architect", "The Evidence Enthusiast")
+- "persona": A 2-3 sentence description of their debate style, personality, and how they should use SSML tags to enhance their delivery. Focus on what makes them shareable and entertaining.`;
 
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
@@ -176,11 +191,15 @@ export const getAgentResponse = async (
   };
 
   if (isFinalVerdict) {
-    config.maxOutputTokens = 900;
+    config.maxOutputTokens = 1200; // ≈900 words for final verdict
+  } else if (agent === AgentType.Orchestrator && round === 1) {
+    config.maxOutputTokens = 200; // ≈150 words for intro
   } else if (agent === AgentType.Orchestrator) {
-    config.maxOutputTokens = 600;
+    config.maxOutputTokens = 240; // ≈180 words for recaps
+  } else if (agent === AgentType.Confused) {
+    config.maxOutputTokens = 160; // ≈120 words for chaos
   } else {
-    config.maxOutputTokens = 500;
+    config.maxOutputTokens = 200; // ≈150 words for Pro/Against
   }
   
   if (model === 'gemini-2.5-pro') {
@@ -232,7 +251,7 @@ export const generateMessageAudio = async (
 
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-tts",
+      model: "gemini-2.5-pro-tts",
       contents: [{ parts: [{ text: fullPrompt }] }],
       config: {
         responseModalities: [Modality.AUDIO],
