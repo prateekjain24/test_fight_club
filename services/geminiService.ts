@@ -262,7 +262,7 @@ export const generateMessageAudio = async (
 
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-2.5-pro-tts",
+      model: "gemini-2.5-pro-preview-tts",
       contents: [{ parts: [{ text: fullPrompt }] }],
       config: {
         responseModalities: [Modality.AUDIO],
