@@ -94,7 +94,7 @@ const AgentMessage: React.FC<AgentMessageProps> = ({ message, onCheer, onShare, 
     } else {
       setIsTyping(false);
     }
-  }, [message.id]); // Rerun effect if message ID changes
+  }, [message.id, message.text]); // Rerun effect if message changes
 
   return (
     <div className={`group animate-fade-in border-l-4 p-4 md:p-6 ${config.borderColor} ${config.bgColor} ${isTyping ? 'animate-pulse-fast' : ''}`}>

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import AgentMessage from './components/AgentMessage';
 import { getAgentResponse, generateMessageAudio, generateTrendingTopic, generateRandomPersonas, generateScorecardHighlights } from './services/geminiService';
 import { AgentType } from './types';
-import type { Message, AgentCollection, Scorecard, ScorecardHighlight } from './types';
+import type { Message, AgentCollection, Scorecard } from './types';
 
 const AGENT_TURN_ORDER: AgentType[] = [
   AgentType.Orchestrator,
@@ -118,7 +118,7 @@ function pcmToWavBlob(pcmData: Uint8Array, sampleRate: number, numChannels: numb
 const TurnAnnouncer: React.FC<{ agentName: string }> = ({ agentName }) => (
     <div className="absolute top-0 left-0 right-0 z-10 animate-announce">
         <div className="bg-black/80 text-center p-2 shadow-lg">
-            <h3 className="text-xl font-display tracking-wider text-red-500">{agentName}'s Turn</h3>
+            <h3 className="text-xl font-display tracking-wider text-red-500">{agentName}&apos;s Turn</h3>
         </div>
     </div>
 );
@@ -132,14 +132,14 @@ const ScorecardDisplay: React.FC<{ scorecard: Scorecard }> = ({ scorecard }) => 
             {scorecard.mostSavageTakedown && (
                 <div className="bg-gray-800/50 p-3">
                     <h4 className="font-bold text-rose-400">Most Savage Takedown</h4>
-                    <p className="text-sm text-slate-400 mt-1">"{scorecard.mostSavageTakedown.quote}"</p>
+                    <p className="text-sm text-slate-400 mt-1">&quot;{scorecard.mostSavageTakedown.quote}&quot;</p>
                     <p className="text-xs font-semibold text-right mt-2">- {scorecard.mostSavageTakedown.agentName}</p>
                 </div>
             )}
             {scorecard.wildestNonSequitur && (
                 <div className="bg-gray-800/50 p-3">
                     <h4 className="font-bold text-fuchsia-400">Wildest Non-Sequitur</h4>
-                    <p className="text-sm text-slate-400 mt-1">"{scorecard.wildestNonSequitur.quote}"</p>
+                    <p className="text-sm text-slate-400 mt-1">&quot;{scorecard.wildestNonSequitur.quote}&quot;</p>
                     <p className="text-xs font-semibold text-right mt-2">- {scorecard.wildestNonSequitur.agentName}</p>
                 </div>
             )}
@@ -153,7 +153,7 @@ const ScorecardDisplay: React.FC<{ scorecard: Scorecard }> = ({ scorecard }) => 
             {scorecard.audienceFavorite && (
                 <div className="bg-gray-800/50 p-3">
                     <h4 className="font-bold text-orange-400">Audience Favorite</h4>
-                     <p className="text-sm text-slate-400 mt-1">"{scorecard.audienceFavorite.quote}"</p>
+                     <p className="text-sm text-slate-400 mt-1">&quot;{scorecard.audienceFavorite.quote}&quot;</p>
                     <p className="text-xs font-semibold text-right mt-2">- {scorecard.audienceFavorite.agentName} ({scorecard.audienceFavorite.cheers} cheers)</p>
                 </div>
             )}
@@ -178,7 +178,7 @@ const ShareableQuoteCard: React.FC<{ message: Message; onClose: () => void }> = 
                     {config.icon}
                     <h3 className="font-bold">{message.agentName}</h3>
                 </div>
-                <p className="text-slate-200 text-lg md:text-xl leading-relaxed">"{message.text}"</p>
+                <p className="text-slate-200 text-lg md:text-xl leading-relaxed">&quot;{message.text}&quot;</p>
                 <div className="text-right mt-6 font-display text-2xl tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-red-600 to-amber-400">
                     AI AGENT FIGHT CLUB
                 </div>
@@ -192,10 +192,21 @@ const ShareableQuoteCard: React.FC<{ message: Message; onClose: () => void }> = 
 };
 
 // Add icons to AgentMessage for use in the share card
-AgentMessage.OrchestratorIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8"><path d="M12 2.25c-5.18 0-9.44 4.06-9.72 9.19-.03.15-.03.3-.03.46 0 5.52 4.48 10 10 10s10-4.48 10-10c0-5.42-4.28-9.85-9.72-9.99a.754.754 0 00-.56 0A9.96 9.96 0 0012 2.25zm1.5 6a.75.75 0 00-1.5 0v6a.75.75 0 001.5 0V8.25zm-4.5 0a.75.75 0 00-1.5 0v6a.75.75 0 001.5 0V8.25zM12 15a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" /></svg>);
-AgentMessage.ProIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8"><path d="M11.25 2.25a.75.75 0 01.75.75v18a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM15.75 6a.75.75 0 01.75.75v14.25a.75.75 0 01-1.5 0V6.75a.75.75 0 01.75-.75zM6.75 9a.75.75 0 01.75.75v11.25a.75.75 0 01-1.5 0V9.75A.75.75 0 016.75 9z" /></svg>);
-AgentMessage.AgainstIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8"><path d="M15.04 4.96a.75.75 0 010 1.06L9.56 11.5l5.48 5.48a.75.75 0 11-1.06 1.06l-6-6a.75.75 0 010-1.06l6-6a.75.75 0 011.06 0z" /></svg>);
-AgentMessage.ConfusedIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8"><path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM12.75 6a.75.75 0 00-1.5 0v6c0 .414.336.75.75.75h3a.75.75 0 000-1.5h-2.25V6z" clipRule="evenodd" /></svg>);
+const OrchestratorIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8"><path d="M12 2.25c-5.18 0-9.44 4.06-9.72 9.19-.03.15-.03.3-.03.46 0 5.52 4.48 10 10 10s10-4.48 10-10c0-5.42-4.28-9.85-9.72-9.99a.754.754 0 00-.56 0A9.96 9.96 0 0012 2.25zm1.5 6a.75.75 0 00-1.5 0v6a.75.75 0 001.5 0V8.25zm-4.5 0a.75.75 0 00-1.5 0v6a.75.75 0 001.5 0V8.25zM12 15a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" /></svg>);
+OrchestratorIcon.displayName = 'OrchestratorIcon';
+AgentMessage.OrchestratorIcon = OrchestratorIcon;
+
+const ProIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8"><path d="M11.25 2.25a.75.75 0 01.75.75v18a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM15.75 6a.75.75 0 01.75.75v14.25a.75.75 0 01-1.5 0V6.75a.75.75 0 01.75-.75zM6.75 9a.75.75 0 01.75.75v11.25a.75.75 0 01-1.5 0V9.75A.75.75 0 016.75 9z" /></svg>);
+ProIcon.displayName = 'ProIcon';
+AgentMessage.ProIcon = ProIcon;
+
+const AgainstIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8"><path d="M15.04 4.96a.75.75 0 010 1.06L9.56 11.5l5.48 5.48a.75.75 0 11-1.06 1.06l-6-6a.75.75 0 010-1.06l6-6a.75.75 0 011.06 0z" /></svg>);
+AgainstIcon.displayName = 'AgainstIcon';
+AgentMessage.AgainstIcon = AgainstIcon;
+
+const ConfusedIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8"><path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM12.75 6a.75.75 0 00-1.5 0v6c0 .414.336.75.75.75h3a.75.75 0 000-1.5h-2.25V6z" clipRule="evenodd" /></svg>);
+ConfusedIcon.displayName = 'ConfusedIcon';
+AgentMessage.ConfusedIcon = ConfusedIcon;
 
 
 const App: React.FC = () => {
@@ -694,7 +705,7 @@ const App: React.FC = () => {
 
             <div>
               <button onClick={() => setShowCustomizer(!showCustomizer)} className="text-red-400 font-semibold hover:text-red-300 transition-colors w-full text-left flex justify-between items-center">
-                <span>The Promoter's Corner (Customize Agents)</span>
+                <span>The Promoter&apos;s Corner (Customize Agents)</span>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="http://www.w3.org/2000/svg" fill="currentColor" className={`w-5 h-5 transition-transform ${showCustomizer ? 'rotate-180' : ''}`}><path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" /></svg>
               </button>
               {showCustomizer && (

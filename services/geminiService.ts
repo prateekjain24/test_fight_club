@@ -1,7 +1,7 @@
 
 
 import { GoogleGenAI, GenerateContentConfig, Modality, GenerateContentResponse, Type } from "@google/genai";
-import type { Message, Source, AgentCollection, AgentConfig, ScorecardHighlight } from '../types';
+import type { Message, Source, AgentConfig, ScorecardHighlight } from '../types';
 import { AgentType } from '../types';
 
 if (!process.env.API_KEY) {
@@ -221,8 +221,19 @@ export const getAgentResponse = async (
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     
     // FIX: Correctly type the `reduce` operation to handle potentially untyped API response data and ensure `sources` is `Source[]`.
-    const sources = groundingChunks.reduce<Source[]>((acc, chunk: any) => {
-        if (chunk.web && chunk.web.uri && chunk.web.title) {
+    const sources = groundingChunks.reduce<Source[]>((acc, chunk: unknown) => {
+        // Type guard to check if chunk has the expected structure
+        if (
+            typeof chunk === 'object' &&
+            chunk !== null &&
+            'web' in chunk &&
+            typeof chunk.web === 'object' &&
+            chunk.web !== null &&
+            'uri' in chunk.web &&
+            'title' in chunk.web &&
+            typeof chunk.web.uri === 'string' &&
+            typeof chunk.web.title === 'string'
+        ) {
             acc.push({ uri: chunk.web.uri, title: chunk.web.title });
         }
         return acc;
