@@ -539,23 +539,68 @@ const App: React.FC = () => {
     setAudioGenerationProgress(0);
     const allAudioBytes: Uint8Array[] = [];
 
+    // Try to acquire wake lock to prevent screen from locking during audio generation
+    let wakeLock: WakeLockSentinel | null = null;
+    const supportsWakeLock = 'wakeLock' in navigator;
+
+    try {
+      if (supportsWakeLock) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        // Wake Lock acquired - screen will stay on during audio generation
+      }
+    } catch (err) {
+      // Wake lock failed, but we can still try to generate audio
+      console.warn('Could not acquire wake lock:', err);
+      setError('Tip: Keep your screen on during audio generation to prevent interruptions.');
+    }
+
     try {
       const messagesToProcess = messages.filter(message => message.text.trim());
+
+      // Helper function to retry audio generation with exponential backoff
+      const generateWithRetry = async (message: Message, agentConfig: AgentConfig, maxRetries = 3): Promise<string> => {
+        let lastError: Error | null = null;
+
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          try {
+            const audioBase64 = await generateMessageAudio(message, agentConfig);
+            return audioBase64;
+          } catch (error) {
+            lastError = error instanceof Error ? error : new Error('Unknown error');
+
+            if (attempt < maxRetries - 1) {
+              // Exponential backoff: 1s, 2s, 4s
+              const delayMs = Math.pow(2, attempt) * 1000;
+              console.warn(`Retrying audio generation for message ${message.id} after ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`);
+              await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+          }
+        }
+
+        throw lastError || new Error('Failed to generate audio after retries');
+      };
+
       for (let i = 0; i < messagesToProcess.length; i++) {
         const message = messagesToProcess[i];
         const agentConfig = agents[message.agent];
-        
-        const audioBase64 = await generateMessageAudio(message, agentConfig);
-        
-        if (audioBase64) {
-          allAudioBytes.push(decode(audioBase64));
+
+        try {
+          const audioBase64 = await generateWithRetry(message, agentConfig);
+
+          if (audioBase64) {
+            allAudioBytes.push(decode(audioBase64));
+          }
+        } catch (error) {
+          console.error(`Failed to generate audio for message ${i + 1}/${messagesToProcess.length}:`, error);
+          // Continue with next message instead of failing entirely
+          setError(`Warning: Audio generation failed for message ${i + 1}. Continuing with remaining messages...`);
         }
-        
+
         setAudioGenerationProgress(Math.round(((i + 1) / messagesToProcess.length) * 100));
       }
 
       if (allAudioBytes.length === 0) {
-        throw new Error("No audio data was generated for any messages.");
+        throw new Error("No audio data was generated for any messages. Please check your network connection and try again.");
       }
 
       // Concatenate all PCM data chunks
@@ -579,9 +624,22 @@ const App: React.FC = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
+      // Clear any warning messages on success
+      setError(null);
+
     } catch (e) {
       setError(e instanceof Error ? `Audio generation failed: ${e.message}` : 'An unknown error occurred during audio generation.');
     } finally {
+      // Release wake lock
+      if (wakeLock) {
+        try {
+          await wakeLock.release();
+          // Wake Lock released
+        } catch (err) {
+          console.warn('Failed to release wake lock:', err);
+        }
+      }
+
       setIsGeneratingAudio(false);
       setAudioGenerationProgress(0);
     }
@@ -766,6 +824,15 @@ const App: React.FC = () => {
         ) : (
           <div className="flex flex-col flex-grow w-full bg-gray-800/50 shadow-2xl overflow-hidden h-[75vh] relative">
              {announcingAgent && <TurnAnnouncer agentName={agents[announcingAgent].name} />}
+             {isGeneratingAudio && (
+               <div className="absolute top-0 left-0 right-0 z-20 bg-green-600/90 backdrop-blur-sm p-3 shadow-lg animate-pulse">
+                 <div className="flex items-center justify-center gap-3 text-white">
+                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                   <span className="font-semibold">Generating audio... {audioGenerationProgress}% complete</span>
+                   <span className="text-sm opacity-90">(Keep screen active)</span>
+                 </div>
+               </div>
+             )}
             <div className="p-4 border-b border-gray-700 bg-gray-900/70">
               <h2 className="text-xl font-bold text-center">Topic: <span className="font-normal text-slate-300">{topic}</span></h2>
             </div>
@@ -809,14 +876,20 @@ const App: React.FC = () => {
                     <>
                       <button onClick={handleRematch} className="text-sm bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-3 transition-colors">Rematch!</button>
                       <button onClick={handleSwapSidesAndRematch} className="text-sm bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold py-2 px-3 transition-colors">Swap Sides!</button>
-                      <button 
-                        onClick={handleGenerateAudio} 
-                        className="text-sm bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                      <button
+                        onClick={handleGenerateAudio}
+                        className="text-sm bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed relative group"
                         disabled={isGeneratingAudio}
+                        title="Generate downloadable audio file (keep screen on during generation)"
                       >
-                        {isGeneratingAudio 
-                          ? `Audio (${audioGenerationProgress}%)`
+                        {isGeneratingAudio
+                          ? `Generating ${audioGenerationProgress}%`
                           : 'Audio'}
+                        {!isGeneratingAudio && (
+                          <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 text-xs bg-gray-700 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                            Keep screen on during generation
+                          </span>
+                        )}
                       </button>
                       <button onClick={handleExport} className="text-sm bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 transition-colors">Export</button>
                     </>
