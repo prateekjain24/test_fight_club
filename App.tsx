@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import AgentMessage from './components/AgentMessage';
-import { getAgentResponse, generateMessageAudio, generateTrendingTopic, generateRandomPersonas, generateScorecardHighlights } from './services/geminiService';
+import { getAgentResponse, generateMessageAudio, generateBatchedAudio, generateTrendingTopic, generateRandomPersonas, generateScorecardHighlights } from './services/geminiService';
 import { AgentType } from './types';
-import type { Message, AgentCollection, Scorecard } from './types';
+import type { Message, AgentCollection, Scorecard, AgentConfig } from './types';
 
 const AGENT_TURN_ORDER: AgentType[] = [
   AgentType.Orchestrator,
@@ -557,8 +557,48 @@ const App: React.FC = () => {
     try {
       const messagesToProcess = messages.filter(message => message.text.trim());
 
+      // Separate final verdict from debate rounds
+      // The final verdict is always the last message and is from the Orchestrator
+      const isFinalVerdictPresent = messagesToProcess.length > totalTurns &&
+                                    messagesToProcess[messagesToProcess.length - 1].agent === AgentType.Orchestrator;
+
+      const debateMessages = isFinalVerdictPresent
+        ? messagesToProcess.slice(0, -1)
+        : messagesToProcess;
+
+      const finalVerdictMessage = isFinalVerdictPresent
+        ? messagesToProcess[messagesToProcess.length - 1]
+        : null;
+
+      // Calculate total steps for progress tracking
+      const estimatedBatches = Math.ceil(debateMessages.length / 2);
+      const totalSteps = estimatedBatches + (finalVerdictMessage ? 1 : 0);
+      let completedSteps = 0;
+
       // Helper function to retry audio generation with exponential backoff
-      const generateWithRetry = async (message: Message, agentConfig: AgentConfig, maxRetries = 3): Promise<string> => {
+      const generateBatchWithRetry = async (msgs: Message[], maxRetries = 3): Promise<string[]> => {
+        let lastError: Error | null = null;
+
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          try {
+            const audioBatches = await generateBatchedAudio(msgs, agents);
+            return audioBatches;
+          } catch (error) {
+            lastError = error instanceof Error ? error : new Error('Unknown error');
+
+            if (attempt < maxRetries - 1) {
+              // Exponential backoff: 1s, 2s, 4s
+              const delayMs = Math.pow(2, attempt) * 1000;
+              console.warn(`Retrying batch audio generation after ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`);
+              await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+          }
+        }
+
+        throw lastError || new Error('Failed to generate audio after retries');
+      };
+
+      const generateSingleWithRetry = async (message: Message, agentConfig: AgentConfig, maxRetries = 3): Promise<string> => {
         let lastError: Error | null = null;
 
         for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -580,23 +620,40 @@ const App: React.FC = () => {
         throw lastError || new Error('Failed to generate audio after retries');
       };
 
-      for (let i = 0; i < messagesToProcess.length; i++) {
-        const message = messagesToProcess[i];
-        const agentConfig = agents[message.agent];
-
+      // Generate batched audio for debate rounds
+      if (debateMessages.length > 0) {
         try {
-          const audioBase64 = await generateWithRetry(message, agentConfig);
+          const audioBatches = await generateBatchWithRetry(debateMessages);
+
+          // Decode and collect all batch audio
+          for (const audioBase64 of audioBatches) {
+            if (audioBase64) {
+              allAudioBytes.push(decode(audioBase64));
+            }
+            completedSteps++;
+            setAudioGenerationProgress(Math.round((completedSteps / totalSteps) * 100));
+          }
+        } catch (error) {
+          console.error('Failed to generate batched audio:', error);
+          setError(`Warning: Batched audio generation failed. ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+
+      // Generate single-speaker audio for final verdict
+      if (finalVerdictMessage) {
+        try {
+          const agentConfig = agents[finalVerdictMessage.agent];
+          const audioBase64 = await generateSingleWithRetry(finalVerdictMessage, agentConfig);
 
           if (audioBase64) {
             allAudioBytes.push(decode(audioBase64));
           }
+          completedSteps++;
+          setAudioGenerationProgress(Math.round((completedSteps / totalSteps) * 100));
         } catch (error) {
-          console.error(`Failed to generate audio for message ${i + 1}/${messagesToProcess.length}:`, error);
-          // Continue with next message instead of failing entirely
-          setError(`Warning: Audio generation failed for message ${i + 1}. Continuing with remaining messages...`);
+          console.error('Failed to generate final verdict audio:', error);
+          setError(`Warning: Final verdict audio generation failed. ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
-
-        setAudioGenerationProgress(Math.round(((i + 1) / messagesToProcess.length) * 100));
       }
 
       if (allAudioBytes.length === 0) {
@@ -694,8 +751,6 @@ const App: React.FC = () => {
 
       if (!response.ok) {
         console.warn('Backup to Google Drive failed:', response.statusText);
-      } else {
-        console.log('Audio successfully backed up to Google Drive');
       }
     } catch (error) {
       // Fail silently - just log to console

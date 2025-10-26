@@ -285,6 +285,104 @@ export const generateMessageAudio = async (
   }
 };
 
+export const generateBatchedAudio = async (
+  messages: Message[],
+  agentConfigs: Record<AgentType, AgentConfig>
+): Promise<string[]> => {
+  const audioBatches: string[] = [];
+
+  // Define fixed pairs: (Orchestrator+Pro) and (Against+Confused)
+  const pairA = [AgentType.Orchestrator, AgentType.Pro];
+  const pairB = [AgentType.Against, AgentType.Confused];
+
+  // Group messages into batches based on fixed pairs
+  const batches: Message[][] = [];
+  let currentBatch: Message[] = [];
+  let expectedPair: AgentType[] = pairA;
+
+  for (const message of messages) {
+    if (!message.text.trim()) continue;
+
+    currentBatch.push(message);
+
+    // Check if we've completed a pair
+    if (currentBatch.length === 2) {
+      batches.push(currentBatch);
+      currentBatch = [];
+      // Alternate between pairs
+      expectedPair = expectedPair === pairA ? pairB : pairA;
+    }
+  }
+
+  // Handle any remaining single message (shouldn't happen in normal flow)
+  if (currentBatch.length > 0) {
+    batches.push(currentBatch);
+  }
+
+  // Generate audio for each batch
+  for (const batch of batches) {
+    if (batch.length === 1) {
+      // Fallback to single-speaker for orphan messages
+      const message = batch[0];
+      const agentConfig = agentConfigs[message.agent];
+      const audioBase64 = await generateMessageAudio(message, agentConfig);
+      if (audioBase64) {
+        audioBatches.push(audioBase64);
+      }
+    } else if (batch.length === 2) {
+      // Multi-speaker generation for pairs
+      const [msg1, msg2] = batch;
+      const config1 = agentConfigs[msg1.agent];
+      const config2 = agentConfigs[msg2.agent];
+
+      // Format prompt as conversation with TTS style prompts
+      const conversationPrompt = `TTS the following conversation between ${msg1.agentName} and ${msg2.agentName}:
+${msg1.agentName}: ${config1.ttsPrompt} ${msg1.text}
+${msg2.agentName}: ${config2.ttsPrompt} ${msg2.text}`;
+
+      try {
+        const response: GenerateContentResponse = await ai.models.generateContent({
+          model: "gemini-2.5-pro-preview-tts",
+          contents: [{ parts: [{ text: conversationPrompt }] }],
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+              multiSpeakerVoiceConfig: {
+                speakerVoiceConfigs: [
+                  {
+                    speaker: msg1.agentName,
+                    voiceConfig: {
+                      prebuiltVoiceConfig: { voiceName: config1.voice }
+                    }
+                  },
+                  {
+                    speaker: msg2.agentName,
+                    voiceConfig: {
+                      prebuiltVoiceConfig: { voiceName: config2.voice }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        });
+
+        const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (base64Audio) {
+          audioBatches.push(base64Audio);
+        } else {
+          throw new Error("API did not return audio data for this batch.");
+        }
+      } catch (error) {
+        console.error(`Failed to generate audio for batch with ${msg1.agentName} and ${msg2.agentName}`, error);
+        throw error;
+      }
+    }
+  }
+
+  return audioBatches;
+};
+
 
 export const generateScorecardHighlights = async (
   topic: string,
