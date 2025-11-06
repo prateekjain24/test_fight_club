@@ -684,7 +684,10 @@ const App: React.FC = () => {
       URL.revokeObjectURL(url);
 
       // Backup to Google Drive via n8n (non-blocking)
-      backupToGoogleDrive(wavBlob, filename);
+      console.log('[DEBUG] About to call backupToGoogleDrive with:', { filename, blobSize: wavBlob.size, webhookUrl: import.meta.env.VITE_N8N_WEBHOOK_URL });
+      backupToGoogleDrive(wavBlob, filename).catch(err => {
+        console.error('[DEBUG] Uncaught error in backupToGoogleDrive:', err);
+      });
 
       // Clear any warning messages on success
       setError(null);
@@ -713,8 +716,11 @@ const App: React.FC = () => {
 
     // Skip if webhook URL is not configured
     if (!webhookUrl || webhookUrl.trim() === '') {
+      console.log('[n8n Backup] Skipped - VITE_N8N_WEBHOOK_URL not configured in .env.local');
       return;
     }
+
+    console.log('[n8n Backup] Starting backup to Google Drive...', { filename, size: wavBlob.size });
 
     try {
       // Convert blob to base64
@@ -729,6 +735,10 @@ const App: React.FC = () => {
       reader.readAsDataURL(wavBlob);
 
       const audioBase64 = await base64Promise;
+      console.log('[n8n Backup] Audio converted to base64, sending to webhook...', {
+        url: webhookUrl.substring(0, 50) + '...',
+        base64Length: audioBase64.length
+      });
 
       // Send to n8n webhook
       const response = await fetch(webhookUrl, {
@@ -750,11 +760,18 @@ const App: React.FC = () => {
       });
 
       if (!response.ok) {
-        console.warn('Backup to Google Drive failed:', response.statusText);
+        console.warn('[n8n Backup] ❌ Failed - HTTP', response.status, response.statusText);
+        const errorText = await response.text().catch(() => 'Could not read error response');
+        console.warn('[n8n Backup] Error details:', errorText);
+      } else {
+        console.log('[n8n Backup] ✅ Success - Audio backed up to Google Drive');
       }
     } catch (error) {
       // Fail silently - just log to console
-      console.warn('Failed to backup audio to Google Drive:', error);
+      console.warn('[n8n Backup] ❌ Failed - Exception:', error);
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        console.warn('[n8n Backup] Network error - check CORS, webhook URL, and n8n is running');
+      }
     }
   };
 
