@@ -684,7 +684,10 @@ const App: React.FC = () => {
       URL.revokeObjectURL(url);
 
       // Backup to Google Drive via n8n (non-blocking)
-      backupToGoogleDrive(wavBlob, filename);
+      console.log('[DEBUG] About to call backupToGoogleDrive with:', { filename, blobSize: wavBlob.size, webhookUrl: import.meta.env.VITE_N8N_WEBHOOK_URL });
+      backupToGoogleDrive(wavBlob, filename).catch(err => {
+        console.error('[DEBUG] Uncaught error in backupToGoogleDrive:', err);
+      });
 
       // Clear any warning messages on success
       setError(null);
